@@ -346,13 +346,25 @@ const CAPS: CapSpec[] = [
       // also needs the interceptor CLI/daemon and a pinned test-profile context.
       // Report "live" only when the runtime setup exists; otherwise say exactly
       // what one-time setup is missing instead of a false green.
-      const cli = which('interceptor') || existsSync(join(HOME, 'Projects', 'interceptor'));
+      // A checkout is not a CLI. The repo's package.json points `interceptor` at
+      // ./dist/interceptor, which only exists after scripts/build.sh runs, so
+      // testing the directory reported a working CLI the moment someone cloned
+      // the repo and read green while nothing was actually runnable.
+      const repo = join(HOME, 'Projects', 'interceptor');
+      const cloned = existsSync(repo);
+      const built = existsSync(join(repo, 'dist', 'interceptor')) ||
+        existsSync(join(repo, 'dist', 'interceptor.exe'));
+      const cli = !!which('interceptor') || built;
       const prefsPath = join(CONFIG_ROOT, 'skills', 'Interceptor', 'preferences.env');
       const hasContext = existsSync(prefsPath) &&
         /^INTERCEPTOR_TEST_CONTEXT_ID=.+/m.test(readFileSync(prefsPath, 'utf8'));
       if (!cli || !hasContext) {
         const missing = [
-          !cli ? 'interceptor CLI/daemon (repo not cloned, binary not on PATH)' : null,
+          !cli
+            ? (cloned
+              ? `interceptor CLI not built (repo is cloned at ${repo} — run its scripts/build.sh, or scripts/install.ps1 on Windows)`
+              : 'interceptor CLI/daemon (repo not cloned, binary not on PATH)')
+            : null,
           !hasContext ? 'pinned test-profile context (INTERCEPTOR_TEST_CONTEXT_ID in preferences.env)' : null,
         ].filter(Boolean).join('; ');
         return { ok: false, detail: `skill + browser present, but runtime setup incomplete: ${missing}` };
