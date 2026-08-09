@@ -41,7 +41,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, readdirS
 import { join, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const CONFIG_ROOT = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude');
 const LIFEOS_DIR = (process.env.LIFEOS_DIR || join(CONFIG_ROOT, 'LIFEOS'))
   .replace(/^\$HOME/, HOME).replace(/^~(?=\/)/, HOME);
@@ -105,9 +105,17 @@ async function run(cmd: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<{ code:
   }
 }
 
+/**
+ * PATH is ';'-delimited on Windows and its executables carry an extension, so
+ * splitting on ':' and probing a bare name reports every tool missing — the
+ * capability table came back all-broken on a working Windows install (gh was
+ * flagged broken with gh.exe on PATH). Resolve per-platform instead.
+ */
+const PATH_SEP = process.platform === 'win32' ? ';' : ':';
+const PATH_EXTS = process.platform === 'win32' ? ['', '.exe', '.cmd', '.bat'] : [''];
+
 function which(bin: string): boolean {
-  const paths = (process.env.PATH || '').split(':');
-  return paths.some(p => p && existsSync(join(p, bin)));
+  return whichPath(bin) !== null;
 }
 
 /**
@@ -116,9 +124,13 @@ function which(bin: string): boolean {
  * '/', so the fallback must yield a real path (public PR #1567, @vibecrypto).
  */
 function whichPath(bin: string): string | null {
-  const paths = (process.env.PATH || '').split(':');
+  const paths = (process.env.PATH || '').split(PATH_SEP);
   for (const p of paths) {
-    if (p && existsSync(join(p, bin))) return join(p, bin);
+    if (!p) continue;
+    for (const ext of PATH_EXTS) {
+      const full = join(p, bin + ext);
+      if (existsSync(full)) return full;
+    }
   }
   return null;
 }
