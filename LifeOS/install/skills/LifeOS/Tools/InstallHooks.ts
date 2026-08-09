@@ -17,8 +17,76 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { detectDevTree, mergeHooks } from "./InstallEngine";
 import { atomicWriteText } from "./lib/atomic-write";
+
+/**
+ * Windows portability pass over the payload hook commands.
+ *
+ * hooks.json ships POSIX invocations — `$HOME/.claude/hooks/X.hook.ts` — which
+ * rely on the shell to expand $HOME and on the `#!/usr/bin/env bun` shebang to
+ * select an interpreter. Windows does neither: cmd.exe leaves `$HOME` literal
+ * and cannot execute a .ts file directly, so every hook fails at spawn and the
+ * whole enforcement layer is silently dead on a Windows install. Rewrite each
+ * command to an explicit `<interpreter> "<absolute path>"` form.
+ *
+ * Also splits `;`-chained commands into separate entries: cmd.exe does not treat
+ * `;` as a command separator, so a chain runs only its first segment (with the
+ * remainder mangled into its arguments).
+ */
+function resolveBash(): string {
+  for (const p of ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files (x86)/Git/bin/bash.exe"]) {
+    if (existsSync(p)) return `"${p}"`;
+  }
+  return "bash"; // last resort — Doctor's hook-interpreter check reports it if absent
+}
+
+function portCommandForWindows(command: string): string[] {
+  const home = homedir().split("\\").join("/");
+  const out: string[] = [];
+  for (const raw of command.split(";")) {
+    let c = raw.trim();
+    if (!c) continue;
+    let interp: string | null = null;
+    const m = /^(bun|bash|sh|node)\s+/.exec(c);
+    if (m) {
+      interp = m[1] === "sh" ? "bash" : m[1];
+      c = c.slice(m[0].length).trim();
+    }
+    if (!c.includes("$HOME")) { out.push(raw.trim()); continue; }
+    c = c.replace(/\$HOME/g, home);
+    const sp = c.indexOf(" ");
+    const script = sp === -1 ? c : c.slice(0, sp);
+    const args = sp === -1 ? "" : c.slice(sp + 1).trim();
+    if (!interp) interp = script.endsWith(".sh") ? "bash" : "bun";
+    if (interp === "bash") interp = resolveBash();
+    out.push(`${interp} "${script}"${args ? " " + args : ""}`);
+  }
+  return out.length ? out : [command];
+}
+
+function portHooksForWindows(hooks: Record<string, unknown>): Record<string, unknown> {
+  if (process.platform !== "win32") return hooks;
+  for (const matchers of Object.values(hooks)) {
+    if (!Array.isArray(matchers)) continue;
+    for (const group of matchers) {
+      const entries = (group as { hooks?: unknown[] })?.hooks;
+      if (!Array.isArray(entries)) continue;
+      const next: unknown[] = [];
+      for (const entry of entries) {
+        const cmd = (entry as { command?: unknown })?.command;
+        if (typeof cmd !== "string") { next.push(entry); continue; }
+        for (const ported of portCommandForWindows(cmd)) {
+          next.push({ ...(entry as object), command: ported });
+        }
+      }
+      (group as { hooks?: unknown[] }).hooks = next;
+    }
+  }
+  return hooks;
+}
+
 
 interface Args { configRoot: string; skillRoot: string; apply: boolean; allowDev: boolean; }
 
@@ -28,7 +96,7 @@ function parseArgs(): Args {
     const i = a.indexOf(flag);
     return i >= 0 && a[i + 1] && !a[i + 1].startsWith("--") ? a[i + 1] : undefined;
   };
-  const home = process.env.HOME || "";
+  const home = (process.env.HOME ?? process.env.USERPROFILE) || "";
   return {
     configRoot: get("--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude"),
     skillRoot: get("--skill-root") || join(import.meta.dir, ".."),
@@ -61,7 +129,7 @@ function main(): void {
     console.log(JSON.stringify({ ok: false, error: `payload hooks.json not found at ${hooksJsonPath}` }, null, 2));
     process.exit(1);
   }
-  const incoming = JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {};
+  const incoming = portHooksForWindows(JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {});
 
   // The hook SCRIPTS (*.hook.ts|sh + lib/**) live beside hooks.json in the payload.
   // Merging hooks.json into settings.json wires commands that point at these files,
