@@ -105,7 +105,10 @@ export function detectOS(): OsInfo {
 }
 
 export function detectTool(name: string, versionCmd: string): ToolInfo {
-  const path = tryExec(`command -v ${name}`);
+  // Bun.which, not `command -v`: the latter is a POSIX shell builtin that does
+  // not exist in the Windows spawn shell, so every tool read as missing there
+  // (windows-port W1). Same idiom as skills/LocalIntelligence/Tools/ClaudeFill.ts.
+  const path = Bun.which(name);
   if (!path) return { installed: false };
   const out = tryExec(versionCmd);
   const m = out?.match(/(\d+\.\d+[.\d]*)/);
@@ -129,7 +132,7 @@ export function detectHarness(home: string): HarnessInfo {
     { name: "cursor", root: join(home, ".cursor"), skills: "skills", bin: "cursor" },
     { name: "openclaw", root: join(home, ".openclaw"), skills: "skills", bin: "openclaw" },
   ];
-  const hasBin = (c: (typeof candidates)[number]) => !!tryExec(`command -v ${c.bin}`);
+  const hasBin = (c: (typeof candidates)[number]) => !!Bun.which(c.bin); // cross-platform PATH lookup (windows-port W1)
   const info = (c: (typeof candidates)[number], confidence: HarnessInfo["confidence"]): HarnessInfo => ({
     name: c.name,
     configRoot: c.root,
@@ -601,7 +604,9 @@ export function setupUserSeparation(
     copied = merged.copied;
     try {
       mkdirSync(dirname(liveUserDir), { recursive: true });
-      symlinkSync(dataUserDir, liveUserDir);
+      // "junction" on win32: directory junctions need no elevation, plain symlinks
+      // EPERM without Developer Mode (windows-port W2; sibling of #1730's fix).
+      symlinkSync(dataUserDir, liveUserDir, process.platform === "win32" ? "junction" : null);
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir };
     } catch (err) {
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir, error: `symlink creation failed (live USER preserved at ${backupDir}): ${err instanceof Error ? err.message : String(err)}` };
@@ -611,7 +616,7 @@ export function setupUserSeparation(
   // Branch (c): fresh install — scaffold the data home (if empty) + symlink.
   try {
     mkdirSync(dirname(liveUserDir), { recursive: true });
-    symlinkSync(dataUserDir, liveUserDir);
+    symlinkSync(dataUserDir, liveUserDir, process.platform === "win32" ? "junction" : null); // windows-port W2
     return { action: "scaffolded-linked", target: dataUserDir, copied };
   } catch (err) {
     return { action: "scaffolded-linked", target: dataUserDir, copied, error: `symlink creation failed: ${err instanceof Error ? err.message : String(err)}` };
