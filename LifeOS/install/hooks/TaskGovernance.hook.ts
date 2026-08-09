@@ -20,6 +20,7 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 
 const input = JSON.parse(readFileSync(0, "utf-8"));
 
@@ -36,7 +37,11 @@ if (!task_description || task_description.trim().length < 10) {
 // --- Rate limit: track tasks per session via temp file ---
 // CLAUDE_SESSION_ID doesn't exist in env, so we use ppid (Claude Code process)
 // and reset the counter when the session (ppid) changes.
-const trackFile = join("/tmp", "pai-task-governance.json");
+// `/tmp` is `C:\tmp` on Windows and exists on no default install. The read
+// below is guarded, but the write at the end of this file is not — so every
+// Task creation raised an unhandled ENOENT out of the hook rather than just
+// losing the counter. POSIX keeps the historic path.
+const trackFile = join(process.platform === "win32" ? tmpdir() : "/tmp", "pai-task-governance.json");
 let taskCount = 0;
 const currentPpid = String(process.ppid);
 

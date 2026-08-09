@@ -60,8 +60,18 @@ import { modelForEffort, pinnedModelForEffort, EFFORT_MODEL, UNIFORM_HARNESS_EFF
 export function resolveClaudeBin(): string {  // exported for algorithm.ts (PR #1460, author asdf8675309)
   const fromPath = typeof Bun !== "undefined" ? Bun.which("claude") : null;
   if (fromPath) return fromPath;
-  const fallback = join(homedir(), ".local", "bin", "claude");
-  return existsSync(fallback) ? fallback : "claude";
+  // The Windows installer writes `claude.exe`, so the extensionless fallback
+  // never existed there and every hook-side inference call died with
+  // `Executable not found in $PATH: "claude"` (seen in prompt-processing.jsonl).
+  for (const c of claudeBinCandidates()) if (existsSync(c)) return c;
+  return "claude";
+}
+
+/** Per-platform names for the CLI under ~/.local/bin, most specific first. */
+function claudeBinCandidates(): string[] {
+  const dir = join(homedir(), ".local", "bin");
+  const names = process.platform === "win32" ? ["claude.exe", "claude.cmd", "claude"] : ["claude"];
+  return names.map(n => join(dir, n));
 }
 
 /** The run levels — IS models.ts EffortLevel, not a copy of it. Declaring the
