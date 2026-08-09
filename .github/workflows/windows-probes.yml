@@ -57,8 +57,10 @@ jobs:
           Write-Host "tools dir:"; Get-ChildItem $tools -Name | Select-Object -First 8
           $env:Path = "$stub;" + $env:Path
           Write-Host "which bun: $((Get-Command bun -ErrorAction SilentlyContinue).Source)"
+          Write-Host "which claude: $((Get-Command claude -ErrorAction SilentlyContinue).Source)"
           $out = cmd /c "$tools\lifeos.cmd" 2`>`&1
-          Write-Host "launcher output (first 15):"; $out | Select-Object -First 15
+          Write-Host "launcher exit: $LASTEXITCODE"
+          Write-Host "launcher output tail:"; $out | Select-Object -Last 12
           if (-not (Test-Path $cap)) { throw "W9 FAIL: claude never spawned. Output above." }
           $argv = Get-Content $cap -Raw
           if ($argv -notmatch 'append-system-prompt-file') { throw "W9 FAIL: no constitution flag in: $argv" }
