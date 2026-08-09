@@ -1,0 +1,62 @@
+# windows-port W11 — the loop's independent green. Secretless probes only;
+# W5/W6 (live claude -p sessions) need ANTHROPIC_API_KEY and are wired
+# separately once the operator decides on the secret.
+name: windows-probes
+on:
+  push:
+    branches: [windows-port]
+  workflow_dispatch:
+
+jobs:
+  probes:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: W8 — path-form unit fixtures
+        run: bun test Probes/windows/
+
+      - name: W1 — DetectEnv reports tools truthfully
+        shell: pwsh
+        run: |
+          $out = bun LifeOS/Tools/DetectEnv.ts | ConvertFrom-Json
+          if (-not $out.bun.installed) { throw 'W1 FAIL: bun not detected' }
+          if (-not $out.git.installed) { throw 'W1 FAIL: git not detected' }
+          Write-Host "W1 PASS: bun $($out.bun.version), git $($out.git.version)"
+
+      - name: W2 — LinkUser reparse point without elevation assumptions
+        shell: pwsh
+        run: |
+          $env:HOME = "$env:RUNNER_TEMP\w2home"; $env:USERPROFILE = $env:HOME
+          $env:CLAUDE_CONFIG_DIR = "$env:HOME\.claude"
+          New-Item -ItemType Directory -Force -Path $env:CLAUDE_CONFIG_DIR | Out-Null
+          bun LifeOS/Tools/ScaffoldUser.ts --apply | Out-Null
+          $r = bun LifeOS/Tools/LinkUser.ts --apply | ConvertFrom-Json
+          if (-not $r.ok) { throw "W2 FAIL: $($r | ConvertTo-Json -Depth 5)" }
+          $lt = (Get-Item "$env:HOME\.claude\LIFEOS\USER" -Force).LinkType
+          if ($lt -ne 'Junction' -and $lt -ne 'SymbolicLink') { throw "W2 FAIL: no reparse point ($lt)" }
+          Write-Host "W2 PASS: LinkType=$lt, contract=$($r.contract.passed)"
+
+      - name: W9 — launcher chain appends the constitution
+        shell: pwsh
+        run: |
+          $stub = "$env:RUNNER_TEMP\stubbin"; New-Item -ItemType Directory -Force -Path $stub | Out-Null
+          $cap = "$env:RUNNER_TEMP\argv.txt"
+          [IO.File]::WriteAllText("$stub\claude.cmd", "@echo off`r`necho %* > `"$cap`"`r`nexit 0`r`n", [Text.Encoding]::ASCII)
+          $env:HOME = "$env:RUNNER_TEMP\w2home"; $env:USERPROFILE = $env:HOME
+          # Deploy enough tree for the launcher: system prompt + launcher files
+          $tools = "$env:HOME\.claude\LIFEOS\TOOLS"
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          Copy-Item LifeOS/install/LIFEOS/LIFEOS_SYSTEM_PROMPT.md "$env:HOME\.claude\LIFEOS\" -Force
+          Copy-Item LifeOS/install/LIFEOS/TOOLS/* $tools -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item LifeOS/install/hooks "$env:HOME\.claude\hooks" -Recurse -Force
+          Copy-Item LifeOS/install/LIFEOS/PULSE "$env:HOME\.claude\LIFEOS\PULSE" -Recurse -Force -ErrorAction SilentlyContinue
+          $env:Path = "$stub;" + $env:Path
+          cmd /c "$tools\lifeos.cmd" 2>&1 | Out-Null
+          if (-not (Test-Path $cap)) { throw 'W9 FAIL: claude never spawned' }
+          $argv = Get-Content $cap -Raw
+          if ($argv -notmatch 'append-system-prompt-file') { throw "W9 FAIL: no constitution flag in: $argv" }
+          Write-Host "W9 PASS: $argv"
