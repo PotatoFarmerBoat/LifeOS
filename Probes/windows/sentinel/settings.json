@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "echo \"S1-shellform HOME=$HOME PWD=$(pwd)\" >> C:/Users/zachary.simandl/code/lifeos-sandbox/hooklog.txt" },
+          { "type": "command", "command": "C:/Users/zachary.simandl/code/lifeos-sandbox/shebang.hook.ts" },
+          { "type": "command", "command": "bun C:/Users/zachary.simandl/code/lifeos-sandbox/explicit.hook.ts" },
+          { "type": "command", "command": "C:/Users/zachary.simandl/code/lifeos-sandbox/posix.hook.sh" },
+          { "type": "command", "command": "echo \"S5-tilde $HOME/.claude/hooks/nonexistent.ts would-be-path\" >> C:/Users/zachary.simandl/code/lifeos-sandbox/hooklog.txt" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "echo U1-userpromptsubmit >> C:/Users/zachary.simandl/code/lifeos-sandbox/hooklog.txt" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo P1-pretooluse-bash >> C:/Users/zachary.simandl/code/lifeos-sandbox/hooklog.txt" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "echo T1-stop >> C:/Users/zachary.simandl/code/lifeos-sandbox/hooklog.txt" } ] }
+    ]
+  }
+}
