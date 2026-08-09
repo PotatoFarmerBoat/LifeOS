@@ -35,6 +35,23 @@ import { atomicWriteText } from "./lib/atomic-write";
  * `;` as a command separator, so a chain runs only its first segment (with the
  * remainder mangled into its arguments).
  */
+/**
+ * Hook commands must not depend on the launcher's PATH. Claude Code runs from
+ * several hosts on Windows — the CLI, the VS Code extension, and the MSIX-packaged
+ * desktop app — and a bare `bun` resolves only if that host happened to inherit
+ * ~/.bun/bin. A sandboxed or Store-installed host may not, and then every hook
+ * dies at spawn with no diagnostic. This file runs under bun, so process.execPath
+ * is the interpreter that will exist at hook time.
+ */
+function resolveBun(): string {
+  const exec = process.execPath;
+  if (exec && /bun(\.exe)?$/i.test(exec)) return `"${exec.split("\\").join("/")}"`;
+  const home = homedir().split("\\").join("/");
+  const bundled = `${home}/.bun/bin/bun.exe`;
+  if (existsSync(bundled)) return `"${bundled}"`;
+  return "bun";
+}
+
 function resolveBash(): string {
   for (const p of ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files (x86)/Git/bin/bash.exe"]) {
     if (existsSync(p)) return `"${p}"`;
@@ -61,6 +78,7 @@ function portCommandForWindows(command: string): string[] {
     const args = sp === -1 ? "" : c.slice(sp + 1).trim();
     if (!interp) interp = script.endsWith(".sh") ? "bash" : "bun";
     if (interp === "bash") interp = resolveBash();
+    else if (interp === "bun") interp = resolveBun();
     out.push(`${interp} "${script}"${args ? " " + args : ""}`);
   }
   return out.length ? out : [command];
