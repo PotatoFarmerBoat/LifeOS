@@ -46,17 +46,20 @@ jobs:
           $stub = "$env:RUNNER_TEMP\stubbin"; New-Item -ItemType Directory -Force -Path $stub | Out-Null
           $cap = "$env:RUNNER_TEMP\argv.txt"
           [IO.File]::WriteAllText("$stub\claude.cmd", "@echo off`r`necho %* > `"$cap`"`r`nexit 0`r`n", [Text.Encoding]::ASCII)
-          $env:HOME = "$env:RUNNER_TEMP\w2home"; $env:USERPROFILE = $env:HOME
+          $env:HOME = "$env:RUNNER_TEMP\w9home"; $env:USERPROFILE = $env:HOME
           # Deploy enough tree for the launcher: system prompt + launcher files
           $tools = "$env:HOME\.claude\LIFEOS\TOOLS"
           New-Item -ItemType Directory -Force -Path $tools | Out-Null
           Copy-Item LifeOS/install/LIFEOS/LIFEOS_SYSTEM_PROMPT.md "$env:HOME\.claude\LIFEOS\" -Force
-          Copy-Item LifeOS/install/LIFEOS/TOOLS/* $tools -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item LifeOS/install/LIFEOS/TOOLS/* $tools -Recurse -Force
           Copy-Item LifeOS/install/hooks "$env:HOME\.claude\hooks" -Recurse -Force
-          Copy-Item LifeOS/install/LIFEOS/PULSE "$env:HOME\.claude\LIFEOS\PULSE" -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item LifeOS/install/LIFEOS/PULSE "$env:HOME\.claude\LIFEOS\PULSE" -Recurse -Force
+          Write-Host "tools dir:"; Get-ChildItem $tools -Name | Select-Object -First 8
           $env:Path = "$stub;" + $env:Path
-          cmd /c "$tools\lifeos.cmd" 2>&1 | Out-Null
-          if (-not (Test-Path $cap)) { throw 'W9 FAIL: claude never spawned' }
+          Write-Host "which bun: $((Get-Command bun -ErrorAction SilentlyContinue).Source)"
+          $out = cmd /c "$tools\lifeos.cmd" 2`>`&1
+          Write-Host "launcher output (first 15):"; $out | Select-Object -First 15
+          if (-not (Test-Path $cap)) { throw "W9 FAIL: claude never spawned. Output above." }
           $argv = Get-Content $cap -Raw
           if ($argv -notmatch 'append-system-prompt-file') { throw "W9 FAIL: no constitution flag in: $argv" }
           Write-Host "W9 PASS: $argv"
