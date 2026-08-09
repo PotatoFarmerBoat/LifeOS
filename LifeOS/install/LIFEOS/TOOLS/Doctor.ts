@@ -106,8 +106,10 @@ async function run(cmd: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<{ code:
 }
 
 function which(bin: string): boolean {
-  const paths = (process.env.PATH || '').split(':');
-  return paths.some(p => p && existsSync(join(p, bin)));
+  // Bun.which handles the platform PATH delimiter (';' on Windows, ':' elsewhere)
+  // and PATHEXT (.exe/.cmd) — the hand-rolled ':' split read every binary as
+  // missing on win32 (windows-port W3).
+  return !!Bun.which(bin);
 }
 
 /**
@@ -116,11 +118,7 @@ function which(bin: string): boolean {
  * '/', so the fallback must yield a real path (public PR #1567, @vibecrypto).
  */
 function whichPath(bin: string): string | null {
-  const paths = (process.env.PATH || '').split(':');
-  for (const p of paths) {
-    if (p && existsSync(join(p, bin))) return join(p, bin);
-  }
-  return null;
+  return Bun.which(bin); // cross-platform (windows-port W3)
 }
 
 function envKey(name: string): string | null {
@@ -579,7 +577,9 @@ function hookInterpreterProblems(): string[] {
     let mode = 0;
     try { mode = statSync(resolved).mode; } catch {}
     const name = basename(resolved);
-    if (!(mode & 0o111)) { problems.push(`${name}: not executable (chmod +x)`); continue; }
+    // NTFS has no execute bit — mode&0o111 is meaningless there and flagged all
+    // 31 hooks "not executable" while every one fired live (windows-port W3/W4).
+    if (process.platform !== 'win32' && !(mode & 0o111)) { problems.push(`${name}: not executable (chmod +x)`); continue; }
     let head = '';
     try { head = readFileSync(resolved, 'utf8').slice(0, 200).split('\n')[0]; } catch {}
     if (!head.startsWith('#!')) { problems.push(`${name}: no #! shebang`); continue; }
@@ -588,7 +588,19 @@ function hookInterpreterProblems(): string[] {
     const interp = shebang[0].endsWith('/env') ? shebang[1] : shebang[0];
     if (!interp) continue;
     if (interp.includes('/')) {
-      if (!existsSync(interp)) problems.push(`${name}: shebang interpreter ${interp} missing`);
+      if (process.platform === 'win32') {
+        // Hooks on Windows run through Git Bash, whose msys layer maps POSIX
+        // interpreter paths (/bin/sh, /bin/bash) — existsSync against the NT
+        // filesystem is the wrong oracle (windows-port W3; .sh hooks verified
+        // firing live 2026-08-09). Probe the basename: PATH, then the bash.exe
+        // that ships beside git.exe in Git for Windows.
+        const base = interp.split('/').pop() ?? interp;
+        const gitExe = Bun.which('git');
+        const gitBash = gitExe ? join(gitExe, '..', '..', 'bin', `${base}.exe`) : '';
+        if (!which(base) && !(gitBash && existsSync(gitBash))) {
+          problems.push(`${name}: shebang needs '${base}' and no Git Bash found to supply it`);
+        }
+      } else if (!existsSync(interp)) problems.push(`${name}: shebang interpreter ${interp} missing`);
     } else if (!which(interp)) {
       problems.push(`${name}: shebang needs '${interp}', not on PATH`);
     }
