@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { detectDevTree, mergeHooks } from "./InstallEngine";
 import { atomicWriteText } from "./lib/atomic-write";
+import { resolveBash, resolveBun } from "./lib/windows-interp";
 
 /**
  * Windows portability pass over the payload hook commands.
@@ -43,21 +44,8 @@ import { atomicWriteText } from "./lib/atomic-write";
  * dies at spawn with no diagnostic. This file runs under bun, so process.execPath
  * is the interpreter that will exist at hook time.
  */
-function resolveBun(): string {
-  const exec = process.execPath;
-  if (exec && /bun(\.exe)?$/i.test(exec)) return `"${exec.split("\\").join("/")}"`;
-  const home = homedir().split("\\").join("/");
-  const bundled = `${home}/.bun/bin/bun.exe`;
-  if (existsSync(bundled)) return `"${bundled}"`;
-  return "bun";
-}
-
-function resolveBash(): string {
-  for (const p of ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files (x86)/Git/bin/bash.exe"]) {
-    if (existsSync(p)) return `"${p}"`;
-  }
-  return "bash"; // last resort — Doctor's hook-interpreter check reports it if absent
-}
+// Both resolvers now live in ./lib/windows-interp so DeployComponents can wire
+// the statusline through exactly the same interpreter this file gives hooks.
 
 function portCommandForWindows(command: string): string[] {
   const home = homedir().split("\\").join("/");

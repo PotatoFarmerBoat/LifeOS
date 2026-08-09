@@ -35,6 +35,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { atomicWriteText } from "./lib/atomic-write";
+import { quoteCmdPath, resolveBash } from "./lib/windows-interp";
 import { dirname, join } from "node:path";
 import { copyMissing, detectDevTree } from "./InstallEngine";
 
@@ -156,9 +157,15 @@ function deployStatusline(ctx: Ctx): ComponentResult {
   // Build the settings.json command from the ACTUAL install root (ctx.lifeosDir),
   // not a hardcoded ~/.claude — a custom --config-root (e.g. ~/.claude-fable) places
   // the script under its own LIFEOS/, and the old literal pointed at the wrong tree.
-  const command = scriptPath.startsWith(`${ctx.home}/`)
-    ? `$HOME/${scriptPath.slice(ctx.home.length + 1)}`
-    : scriptPath;
+  // Windows cannot exec a `.sh` path and does not expand `$HOME`, so the
+  // statusline never rendered there: settings.json held a bare script path the
+  // host could not launch. Name Git Bash absolutely and pass the script to it,
+  // which is what InstallHooks already does for every bash hook command.
+  const command = process.platform === "win32"
+    ? `${resolveBash()} ${quoteCmdPath(scriptPath)}`
+    : scriptPath.startsWith(`${ctx.home}/`)
+      ? `$HOME/${scriptPath.slice(ctx.home.length + 1)}`
+      : scriptPath;
 
   if (!av.inLive && !av.inPayload) {
     r.blockers.push(`LIFEOS_StatusLine.sh not in live tree (${scriptPath}) or payload`);
@@ -197,8 +204,15 @@ function deployStatusline(ctx: Ctx): ComponentResult {
     r.applied = !alreadyWired;
     const reread = JSON.parse(readFileSync(settingsPath, "utf-8"));
     const wired = (reread.statusLine as Record<string, unknown> | undefined)?.command === command;
+    // `test` is a POSIX binary Windows does not ship, so this probe threw and
+    // reported executable=false on an install that was in fact fine. Windows has
+    // no execute bit anyway: presence is the whole question there.
     let executable = false;
-    try { execFileSync("test", ["-x", scriptPath]); executable = true; } catch { executable = false; }
+    if (process.platform === "win32") {
+      executable = existsSync(scriptPath);
+    } else {
+      try { execFileSync("test", ["-x", scriptPath]); executable = true; } catch { executable = false; }
+    }
     r.probe = { name: "statusline-wired", passed: wired && executable, detail: `wired=${wired} executable=${executable}${alreadyWired ? " (idempotent)" : ""}` };
   } catch (err) {
     r.error = err instanceof Error ? err.message : String(err);
