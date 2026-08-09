@@ -109,9 +109,9 @@ interface UpdateData {
 // Constants
 // ============================================================================
 
-const LIFEOS_DIR = process.env.HOME + '/.claude/LIFEOS';
+const LIFEOS_DIR = (process.env.HOME ?? process.env.USERPROFILE) + '/.claude/LIFEOS';
 // NOT under LIFEOS_DIR — skills/ lives at the ~/.claude root, not under LIFEOS/.
-const CREATE_UPDATE_SCRIPT = join(process.env.HOME || '', '.claude/LIFEOS/TOOLS/CreateUpdate.ts');
+const CREATE_UPDATE_SCRIPT = join((process.env.HOME ?? process.env.USERPROFILE) || '', '.claude/LIFEOS/TOOLS/CreateUpdate.ts');
 
 // Words that indicate generic/bad titles - reject these
 const GENERIC_TITLE_PATTERNS = [

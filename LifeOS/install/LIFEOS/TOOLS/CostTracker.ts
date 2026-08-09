@@ -33,7 +33,7 @@ import { join } from "path";
 import { execSync } from "child_process";
 import { PULSE_BASE } from "../PULSE/endpoint";
 
-const HOME = process.env.HOME ?? "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "";
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS");
 const OBS_DIR = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY");
 const LEDGER_PATH = join(OBS_DIR, "anthropic-cost.jsonl");

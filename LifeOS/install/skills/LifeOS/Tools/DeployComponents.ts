@@ -388,7 +388,7 @@ function deploy(component: Component, ctx: Ctx): ComponentResult {
 
 function main(): void {
   const a = process.argv.slice(2);
-  const home = process.env.HOME || "";
+  const home = (process.env.HOME ?? process.env.USERPROFILE) || "";
   const configRoot = arg(a, "--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
   const skillRoot = arg(a, "--skill-root") || join(import.meta.dir, "..");
   const apply = a.includes("--apply");

@@ -9,7 +9,7 @@
 
 import { join } from "path"
 
-const HOME = process.env.HOME ?? ""
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? ""
 const MODULE_NAME = "example"
 
 interface ModuleState {

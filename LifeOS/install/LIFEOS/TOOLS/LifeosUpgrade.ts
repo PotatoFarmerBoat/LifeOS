@@ -28,7 +28,7 @@ import { existsSync, readFileSync, lstatSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-const HOME = process.env.HOME ?? homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? homedir();
 const CLAUDE_ROOT = join(HOME, ".claude");
 
 interface MigrationContext {

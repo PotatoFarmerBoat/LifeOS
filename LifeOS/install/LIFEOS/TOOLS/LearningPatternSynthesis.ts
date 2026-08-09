@@ -46,7 +46,7 @@ import {
 // Configuration
 // ============================================================================
 
-const CLAUDE_DIR = path.join(process.env.HOME!, ".claude");
+const CLAUDE_DIR = path.join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude");
 const LIFEOS_DIR = path.join(CLAUDE_DIR, "LIFEOS");
 const MEMORY_DIR = path.join(LIFEOS_DIR, "MEMORY");
 const LEARNING_DIR = path.join(MEMORY_DIR, "LEARNING");

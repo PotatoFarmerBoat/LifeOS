@@ -86,7 +86,7 @@ export interface LifeosConfig {
 
 // ─────────── Resolution ───────────
 
-const DEFAULT_HOME = process.env.HOME || homedir();
+const DEFAULT_HOME = (process.env.HOME ?? process.env.USERPROFILE) || homedir();
 const DEFAULT_CONFIG_PATH = resolve(DEFAULT_HOME, ".claude/LIFEOS/USER/CONFIG/LIFEOS_CONFIG.toml");
 
 let cache: { config: LifeosConfig; mtime: number; path: string } | null = null;

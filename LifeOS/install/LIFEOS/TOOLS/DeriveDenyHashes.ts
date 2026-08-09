@@ -33,7 +33,7 @@ import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 
-const HOME = process.env.HOME || homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || homedir();
 const CLAUDE = join(HOME, ".claude");
 const ENV_PATH = join(CLAUDE, ".env");
 // USER/SECURITY, not skills/_LIFEOS: writing into skills/_LIFEOS/ created the

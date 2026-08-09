@@ -19,7 +19,7 @@ import { spawnSync } from "child_process";
 import { appendFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const PKG = "@openai/codex";
 const LOG = join(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY", "codex-update.jsonl");
 

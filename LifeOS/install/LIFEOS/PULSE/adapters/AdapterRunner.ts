@@ -11,7 +11,7 @@ import { inference } from "../../TOOLS/Inference";
 // every build that reached inference threw (public PR #1648, @elhoim).
 import { modelToLevel } from "./model-level";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const OBSERVABILITY_DIR = resolve(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY");
 const RUNS_LOG = join(OBSERVABILITY_DIR, "adapter-runs.jsonl");
 

@@ -18,7 +18,7 @@ import { join, resolve } from "path"
 import { copyFileSync, existsSync, mkdirSync } from "fs"
 import { PULSE_BASE } from "./endpoint"
 
-const HOME = process.env.HOME ?? "~"
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "~"
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
 

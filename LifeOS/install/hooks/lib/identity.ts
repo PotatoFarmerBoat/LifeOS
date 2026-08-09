@@ -15,7 +15,7 @@ import { join } from 'path';
 import { parse as parseYaml } from 'yaml';
 import { loadLifeosConfig } from '../../LIFEOS/TOOLS/LifeosConfig';
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const SETTINGS_PATH = join(HOME, '.claude/settings.json');
 
 // Identity-file paths derive from LifeosConfig's userDir. On fresh installs where

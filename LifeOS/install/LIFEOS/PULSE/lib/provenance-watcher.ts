@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { atomicWriteText } from "./atomic-write";
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const EDITS_LOG = resolve(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY", "pulse-edits.jsonl");
 const PULSE_EDIT_GRACE_MS = 5_000;
 

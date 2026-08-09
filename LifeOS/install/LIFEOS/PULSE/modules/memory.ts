@@ -30,7 +30,7 @@ import {
 import { join } from "node:path";
 import { parseMemoryContent } from "../../TOOLS/MemoryWriter";
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const CLAUDE = join(HOME, ".claude");
 const OBS_DIR = join(CLAUDE, "LIFEOS/MEMORY/OBSERVABILITY");
 

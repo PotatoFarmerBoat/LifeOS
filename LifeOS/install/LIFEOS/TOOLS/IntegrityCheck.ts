@@ -55,7 +55,7 @@ import { createHash } from 'crypto';
 import { findRuleDuplicates } from './lib/rule-duplication';
 import { ASCENT, type AscentState } from './ascent';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const CLAUDE_DIR = join(HOME, '.claude');
 const LIFEOS_DIR = join(CLAUDE_DIR, 'LIFEOS');
 const TOOLS_DIR = join(LIFEOS_DIR, 'TOOLS');
