@@ -14,7 +14,7 @@ import { loadLifeosConfig } from "../../TOOLS/LifeosConfig"
 import { read as readMemory, type ReadResult as MemoryReadResult } from "../../TOOLS/MemoryWriter"
 import { getRelevantContext } from "../../TOOLS/MemoryRetriever"
 
-const HOME = process.env.HOME ?? ""
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? ""
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 
 // Ceiling on the per-turn LifeOS memory injection — fits DA + PRINCIPAL

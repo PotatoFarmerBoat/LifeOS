@@ -29,7 +29,7 @@
 import { existsSync, statSync, readdirSync, readFileSync } from "fs"
 import { join } from "path"
 
-const HOME = process.env.HOME ?? "~"
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "~"
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 const USER_DIR = join(LIFEOS_DIR, "USER")
 const TELOS_DIR = join(USER_DIR, "TELOS")

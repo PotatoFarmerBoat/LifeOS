@@ -13,7 +13,7 @@ import { readFileSync } from "fs"
 import { parse } from "smol-toml"
 import { SignJWT, importPKCS8 } from "jose"
 
-const HOME = process.env.HOME ?? ""
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? ""
 const PULSE_DIR = join(HOME, ".claude", "LIFEOS", "PULSE")
 const STATE_FILE = join(PULSE_DIR, "state", "work-token.json")
 

@@ -58,7 +58,7 @@ export async function run(input: any): Promise<object | null> {
     if (!offenders.length) return null;
 
     const lines = offenders.flatMap((o) => [
-      `  ${o.path.replace(process.env.HOME || "", "~")}`,
+      `  ${o.path.replace((process.env.HOME ?? process.env.USERPROFILE) || "", "~")}`,
       ...o.hard.map((h) => `    ❌ ${h}`),
     ]);
     return {

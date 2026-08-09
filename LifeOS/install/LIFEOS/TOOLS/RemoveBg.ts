@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 
 function resolveRembgBin(): string {
   if (process.env.REMBG_BIN) return process.env.REMBG_BIN;
-  const home = process.env.HOME;
+  const home = (process.env.HOME ?? process.env.USERPROFILE);
   if (!home) throw new Error("HOME not set; cannot resolve rembg binary");
   return resolve(home, ".local/bin/rembg");
 }

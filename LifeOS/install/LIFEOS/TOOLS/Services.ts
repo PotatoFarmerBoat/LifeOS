@@ -15,7 +15,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  cadenceOfSpec, installTask, parsePlist, registeredLabels, uninstallTask, windowsBlocker, wrapperExists,
+} from "./lib/win-scheduler";
 
+const IS_WIN = process.platform === "win32";
 const HOME = homedir();
 const CLAUDE = join(HOME, ".claude");
 const LIFEOS = join(CLAUDE, "LIFEOS");
@@ -126,8 +130,18 @@ function sh(cmd: string): { code: number; out: string } {
  * missing forever, which is the kind of bug that hides a dead service.
  */
 export function loadedLabels(): Set<string> {
+  // Windows has no launchctl; the equivalent question is which tasks exist under
+  // the LifeOS Task Scheduler folder.
+  if (IS_WIN) return registeredLabels();
   const r = sh("launchctl list 2>/dev/null | awk '{print $3}'");
   return new Set(r.out.split("\n").map((s) => s.trim()).filter(Boolean));
+}
+
+/** Absolute bun, for substitution into a plist's __BUN_PATH__ / {{BUN}}. */
+function bunPath(): string {
+  const exec = process.execPath;
+  if (exec && /bun(\.exe)?$/i.test(exec)) return exec;
+  return IS_WIN ? join(HOME, ".bun", "bin", "bun.exe") : join(HOME, ".bun", "bin", "bun");
 }
 
 /** Find the plist for a label: installed one wins, else a template in TOOLS/PULSE. */
@@ -170,16 +184,22 @@ const pick = (s: Svc) => (onlyArg ? onlyArg.includes(s.label) || onlyArg.include
 if (cmd === "status" || cmd === "list") {
   const loaded = loadedLabels();
   console.log(`LifeOS background services (${SERVICES.length})\n`);
-  console.log("  " + "STATE".padEnd(13) + "CADENCE".padEnd(16) + "SERVICE");
+  console.log("  " + "STATE".padEnd(13) + "CADENCE".padEnd(18) + "SERVICE");
   for (const cat of ["pulse", "sidecar", "capture", "sync", "sweep", "maintenance"] as Cat[]) {
     const rows = SERVICES.filter((s) => s.category === cat);
     if (!rows.length) continue;
     console.log(`\n  ── ${cat} ──`);
     for (const s of rows) {
       const pl = findPlist(s.label);
-      const state = loaded.has(s.label) ? "● running" : pl?.installed ? "○ installed" : pl ? "· available" : "✗ missing";
-      const cad = pl ? cadenceOf(pl.path) : "—";
-      console.log("  " + state.padEnd(13) + cad.padEnd(16) + `${s.title}  (${s.label})`);
+      // On Windows "installed" means a generated wrapper exists; LaunchAgents,
+      // which pl.installed tests, is never present there.
+      const installed = IS_WIN ? wrapperExists(s.label) : !!pl?.installed;
+      const state = loaded.has(s.label) ? "● running" : installed ? "○ installed" : pl ? "· available" : "✗ missing";
+      // On Windows report the schedule actually registered, which differs from
+      // the plist wherever launchd has a trigger Task Scheduler lacks.
+      const winSpec = IS_WIN && pl ? parsePlist(pl.path, bunPath()) : null;
+      const cad = winSpec ? cadenceOfSpec(winSpec) : pl ? cadenceOf(pl.path) : "—";
+      console.log("  " + state.padEnd(13) + cad.padEnd(18) + `${s.title}  (${s.label})`);
     }
   }
   const missingCore = SERVICES.filter((s) => !s.optIn && !loaded.has(s.label));
@@ -192,6 +212,47 @@ if (cmd === "status" || cmd === "list") {
     const cad = pl ? cadenceOf(pl.path) : "—";
     const inst = s.install.startsWith("#") ? s.install.slice(1).trim() : `\`${s.install.replace(HOME, "~")}\``;
     console.log(`| **${s.title}** \`${s.label}\` | ${s.category} | ${cad} | ${s.optIn ? "yes" : "core"} | ${s.purpose} | ${inst} |`);
+  }
+} else if (cmd === "install" && IS_WIN) {
+  // Windows installs from the plist, not from the service's POSIX install
+  // command: those shell out to launchctl or to bash manage.sh scripts. A
+  // service with no shipped plist has no Windows definition and is skipped
+  // loudly rather than silently reported as installed.
+  const targets = SERVICES.filter(pick).filter((s) => (all || onlyArg ? true : !s.optIn));
+  const bun = bunPath();
+  const bunDir = bun.replace(/[\\/][^\\/]+$/, "");
+  const planned = targets.map((s) => {
+    const pl = findPlist(s.label);
+    const spec = pl ? parsePlist(pl.path, bun) : null;
+    const blocker = spec ? windowsBlocker(spec) : "no plist ships for this service";
+    return { svc: s, spec, blocker };
+  });
+  const runnable = planned.filter((p) => p.spec && !p.blocker);
+  const skipped = planned.filter((p) => p.blocker);
+
+  console.log(`Installing ${runnable.length} service(s) as Windows scheduled tasks:`);
+  if (!yes) {
+    console.log("  (dry preview — re-run with --yes to execute)");
+    for (const p of runnable) console.log(`  ${p.svc.label}: ${cadenceOfSpec(p.spec!)} — ${p.spec!.argv.join(" ")}`);
+    for (const p of skipped) console.log(`  ${p.svc.label}: ⏭  ${p.blocker}`);
+    process.exit(0);
+  }
+  let wfailed = 0;
+  for (const p of runnable) {
+    process.stdout.write(`  ${p.svc.label} … `);
+    const r = installTask(p.spec!, bunDir);
+    if (r.code === 0) console.log(`✅ ${cadenceOfSpec(p.spec!)}`);
+    else { console.log(`⚠️ (${r.out.split("\n").pop()})`); wfailed++; }
+  }
+  for (const p of skipped) console.log(`  ${p.svc.label} … ⏭  ${p.blocker}`);
+  console.log(`\nRun \`bun Services.ts status\` to confirm.`);
+  if (wfailed > 0) { console.error(`${wfailed} service install(s) FAILED.`); process.exit(1); }
+} else if (cmd === "uninstall" && IS_WIN) {
+  if (!onlyArg) { console.error("uninstall requires --only <labels> (refusing to remove everything at once)"); process.exit(1); }
+  for (const s of SERVICES.filter(pick)) {
+    process.stdout.write(`  ${s.label} … `);
+    const r = uninstallTask(s.label);
+    console.log(r.code === 0 ? "🧹" : `⚠️ (${r.out.split("\n").pop()})`);
   }
 } else if (cmd === "install") {
   const targets = SERVICES.filter(pick).filter((s) => (all || onlyArg ? true : !s.optIn) && !s.install.startsWith("#"));

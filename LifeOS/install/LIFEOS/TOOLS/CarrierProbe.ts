@@ -85,8 +85,15 @@ function check(): number {
 }
 
 function resolveClaudeBin(): string {
-  const local = join(homedir(), ".local", "bin", "claude");
-  return existsSync(local) ? local : "claude";
+  // Windows ships the CLI as `claude.exe`; the extensionless probe there always
+  // missed and fell through to a bare name the subprocess PATH may not carry.
+  const dir = join(homedir(), ".local", "bin");
+  const names = process.platform === "win32" ? ["claude.exe", "claude.cmd", "claude"] : ["claude"];
+  for (const n of names) {
+    const p = join(dir, n);
+    if (existsSync(p)) return p;
+  }
+  return "claude";
 }
 
 /** Run the child claude session; return its JSON envelope. Mirrors the

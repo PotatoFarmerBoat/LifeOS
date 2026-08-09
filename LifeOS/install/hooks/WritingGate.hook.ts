@@ -3,7 +3,7 @@
 // in LIFEOS_DIR/LIFEOS_CONFIG_DIR/PROJECTS_DIR resolves to a shadow dir (#1404 / PR #1451, author jbmml).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
 }
 
 /**
@@ -41,11 +41,11 @@ import { dirname, join } from "path";
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const v = process.env[k];
-  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
 }
 
 
-const LIFEOS_DIR = process.env.LIFEOS_DIR || join(process.env.HOME!, ".claude", "LIFEOS");
+const LIFEOS_DIR = process.env.LIFEOS_DIR || join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude", "LIFEOS");
 const OBS_PATH = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY", "writing-gate.jsonl");
 const RUNS_PATH = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY", "pangram-runs.jsonl");
 const RUN_WINDOW_MS = 30 * 60 * 1000; // a run counts as "this turn" within 30 min
@@ -126,7 +126,7 @@ function freshRuns(): RunRec[] {
 function detectorAvailable(): boolean {
   if (process.env.PANGRAM_API_KEY) return true;
   try {
-    const env = readFileSync(join(process.env.HOME!, ".claude", ".env"), "utf8");
+    const env = readFileSync(join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude", ".env"), "utf8");
     return env.split("\n").some((l) => {
       if (!l.startsWith("PANGRAM_API_KEY=")) return false;
       return l.slice("PANGRAM_API_KEY=".length).replace(/^["']|["']$/g, "").trim().length > 0;

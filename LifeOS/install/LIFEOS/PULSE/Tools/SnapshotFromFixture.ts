@@ -5,7 +5,7 @@ import { renderShell, renderPage } from "../ui/render";
 import type { PageData } from "../Schema/PulseSchema";
 import { PageDataSchema } from "../Schema/PulseSchema";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const FIX_DIR = resolve(HOME, ".claude", "LIFEOS", "PULSE", "Schema", "Fixtures");
 const OUT_DIR = resolve(HOME, ".claude", "LIFEOS", "PULSE", "Schema", "Snapshots");
 mkdirSync(OUT_DIR, { recursive: true });

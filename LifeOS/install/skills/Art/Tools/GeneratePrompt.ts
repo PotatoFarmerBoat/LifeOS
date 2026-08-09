@@ -68,7 +68,7 @@ interface PromptOutput {
 // ============================================================================
 
 const ART_AESTHETIC_PATH = resolve(
-  process.env.HOME!,
+  (process.env.HOME ?? process.env.USERPROFILE)!,
   ".claude/LIFEOS/Aesthetic.md"
 );
 

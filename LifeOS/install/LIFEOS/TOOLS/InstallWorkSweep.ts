@@ -27,7 +27,7 @@ import { join } from "path";
 
 declare const Bun: { spawn: (cmd: string[], opts?: any) => any };
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const LABEL = "com.lifeos.worksweep";
 const IS_LINUX = process.platform === "linux";
 

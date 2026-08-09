@@ -17,8 +17,76 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { detectDevTree, mergeHooks } from "./InstallEngine";
 import { atomicWriteText } from "./lib/atomic-write";
+// Hook commands must not depend on the launcher's PATH. Claude Code runs from
+// several hosts on Windows — the CLI, the VS Code extension, and the MSIX-packaged
+// desktop app — and a bare `bun` resolves only if that host happened to inherit
+// ~/.bun/bin. Both resolvers live in ./lib/windows-interp so DeployComponents can
+// wire the statusline through exactly the same interpreter this file gives hooks.
+import { resolveBash, resolveBun } from "./lib/windows-interp";
+
+/**
+ * Windows portability pass over the payload hook commands.
+ *
+ * hooks.json ships POSIX invocations — `$HOME/.claude/hooks/X.hook.ts` — which
+ * rely on the shell to expand $HOME and on the `#!/usr/bin/env bun` shebang to
+ * select an interpreter. Windows does neither: cmd.exe leaves `$HOME` literal
+ * and cannot execute a .ts file directly, so every hook fails at spawn and the
+ * whole enforcement layer is silently dead on a Windows install. Rewrite each
+ * command to an explicit `<interpreter> "<absolute path>"` form.
+ *
+ * Also splits `;`-chained commands into separate entries: cmd.exe does not treat
+ * `;` as a command separator, so a chain runs only its first segment (with the
+ * remainder mangled into its arguments).
+ */
+function portCommandForWindows(command: string): string[] {
+  const home = homedir().split("\\").join("/");
+  const out: string[] = [];
+  for (const raw of command.split(";")) {
+    let c = raw.trim();
+    if (!c) continue;
+    let interp: string | null = null;
+    const m = /^(bun|bash|sh|node)\s+/.exec(c);
+    if (m) {
+      interp = m[1] === "sh" ? "bash" : m[1];
+      c = c.slice(m[0].length).trim();
+    }
+    if (!c.includes("$HOME")) { out.push(raw.trim()); continue; }
+    c = c.replace(/\$HOME/g, home);
+    const sp = c.indexOf(" ");
+    const script = sp === -1 ? c : c.slice(0, sp);
+    const args = sp === -1 ? "" : c.slice(sp + 1).trim();
+    if (!interp) interp = script.endsWith(".sh") ? "bash" : "bun";
+    if (interp === "bash") interp = resolveBash();
+    else if (interp === "bun") interp = resolveBun();
+    out.push(`${interp} "${script}"${args ? " " + args : ""}`);
+  }
+  return out.length ? out : [command];
+}
+
+function portHooksForWindows(hooks: Record<string, unknown>): Record<string, unknown> {
+  if (process.platform !== "win32") return hooks;
+  for (const matchers of Object.values(hooks)) {
+    if (!Array.isArray(matchers)) continue;
+    for (const group of matchers) {
+      const entries = (group as { hooks?: unknown[] })?.hooks;
+      if (!Array.isArray(entries)) continue;
+      const next: unknown[] = [];
+      for (const entry of entries) {
+        const cmd = (entry as { command?: unknown })?.command;
+        if (typeof cmd !== "string") { next.push(entry); continue; }
+        for (const ported of portCommandForWindows(cmd)) {
+          next.push({ ...(entry as object), command: ported });
+        }
+      }
+      (group as { hooks?: unknown[] }).hooks = next;
+    }
+  }
+  return hooks;
+}
+
 
 interface Args { configRoot: string; skillRoot: string; apply: boolean; allowDev: boolean; omits: string[]; }
 
@@ -28,7 +96,9 @@ function parseArgs(): Args {
     const i = a.indexOf(flag);
     return i >= 0 && a[i + 1] && !a[i + 1].startsWith("--") ? a[i + 1] : undefined;
   };
-  const home = process.env.HOME || "";
+  // USERPROFILE fallback: Windows does not set HOME, so a bare process.env.HOME
+  // resolved the config root to a bare ".claude" relative path.
+  const home = (process.env.HOME ?? process.env.USERPROFILE) || "";
   // --omit <substring> (repeatable): drop payload entries whose command/url
   // contains the substring BEFORE merging — e.g. --omit MergeSettings.ts keeps
   // settings.json ownership with the user on installs where settings.json
@@ -69,7 +139,7 @@ function main(): void {
     console.log(JSON.stringify({ ok: false, error: `payload hooks.json not found at ${hooksJsonPath}` }, null, 2));
     process.exit(1);
   }
-  const incoming = JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {};
+  const incoming = portHooksForWindows(JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {});
 
   // Apply --omit filters to the payload before the merge sees it. Buckets that
   // empty out are dropped whole; the count is reported so a dry run shows

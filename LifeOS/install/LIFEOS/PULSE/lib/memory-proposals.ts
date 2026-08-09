@@ -20,7 +20,7 @@ import {
   type ProposalTargetKind,
 } from "../../TOOLS/MemoryTypes";
 
-const HOME = process.env.HOME ?? homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? homedir();
 const OBS_DIR = join(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY");
 const PROPOSAL_REPLIES_LOG_PATH = join(OBS_DIR, "proposal-replies.jsonl");
 const IDENTITY_PROPOSALS_LOG_PATH = join(OBS_DIR, "identity-proposals.jsonl");

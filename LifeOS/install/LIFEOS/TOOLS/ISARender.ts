@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { ASCENT, ASCENT_BRACKETS, PHASE_TO_ASCENT } from "./ascent";
 
-const HOME = process.env.HOME || homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || homedir();
 const TOOLS_DIR = resolve(HOME, ".claude/LIFEOS/TOOLS");
 const TEMPLATE_HTML = join(TOOLS_DIR, "ISARender/template.html");
 const TEMPLATE_CSS = join(TOOLS_DIR, "ISARender/template.css");

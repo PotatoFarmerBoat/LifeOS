@@ -238,7 +238,7 @@ async function main() {
         offsetInWorkFile = args.start;
       }
     } else {
-      workFile = resolve(args.source.replace(/^~/, process.env.HOME!));
+      workFile = resolve(args.source.replace(/^~/, (process.env.HOME ?? process.env.USERPROFILE)!));
       if (!existsSync(workFile)) die(`source file not found: ${workFile}`);
       offsetInWorkFile = args.start;
     }
@@ -259,7 +259,7 @@ async function main() {
     if (args.captions) {
       let srtText: string | undefined;
       if (args.srt) {
-        const p = resolve(args.srt.replace(/^~/, process.env.HOME!));
+        const p = resolve(args.srt.replace(/^~/, (process.env.HOME ?? process.env.USERPROFILE)!));
         if (!existsSync(p)) die(`--srt file not found: ${p}`);
         srtText = readFileSync(p, "utf-8");
       } else if (isUrl) {
@@ -283,12 +283,12 @@ async function main() {
     }
 
     // Output path
-    let out = args.out ? resolve(args.out.replace(/^~/, process.env.HOME!)) : undefined;
+    let out = args.out ? resolve(args.out.replace(/^~/, (process.env.HOME ?? process.env.USERPROFILE)!)) : undefined;
     if (!out) {
       const workDir = Bun.spawnSync(["bun", join(import.meta.dir, "current-work-dir.ts")]);
       const base = workDir.exitCode === 0 && workDir.stdout.toString().trim()
         ? join(workDir.stdout.toString().trim(), "clips")
-        : join(process.env.HOME!, "Downloads");
+        : join((process.env.HOME ?? process.env.USERPROFILE)!, "Downloads");
       out = join(base, `clip-${fmtTime(args.start).replace(/[:.]/g, "")}-${fmtTime(args.end).replace(/[:.]/g, "")}.mp4`);
     }
     mkdirSync(dirname(out), { recursive: true });

@@ -32,7 +32,7 @@ import { join } from "path";
 // Where the US-Common-Metrics dataset lives. Override with USMETRICS_DATA_DIR;
 // otherwise fall back to the USER tree, which every install has.
 const SUBSTRATE_PATH = process.env.USMETRICS_DATA_DIR
-  || join(process.env.HOME || "", ".claude/LIFEOS/USER/DATA/US-Common-Metrics");
+  || join((process.env.HOME ?? process.env.USERPROFILE) || "", ".claude/LIFEOS/USER/DATA/US-Common-Metrics");
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const EIA_API_KEY = process.env.EIA_API_KEY;
 

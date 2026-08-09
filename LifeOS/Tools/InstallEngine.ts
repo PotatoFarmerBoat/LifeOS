@@ -106,8 +106,12 @@ export function detectOS(): OsInfo {
 
 export function detectTool(name: string, versionCmd: string): ToolInfo {
   // Bun.which, not `command -v`: the latter is a POSIX shell builtin that does
-  // not exist in the Windows spawn shell, so every tool read as missing there
-  // (windows-port W1). Same idiom as skills/LocalIntelligence/Tools/ClaudeFill.ts.
+  // not exist in the Windows spawn shell, so on Windows every probe failed and
+  // DetectEnv reported bun and git missing on a machine that was, at that
+  // moment, running this file under bun (windows-port W1). Bun.which resolves
+  // PATHEXT natively — verified to return the .cmd shim for `claude` — so it
+  // beats shelling out to `where` and needs no per-platform branch. Same idiom
+  // as skills/LocalIntelligence/Tools/ClaudeFill.ts.
   const path = Bun.which(name);
   if (!path) return { installed: false };
   const out = tryExec(versionCmd);
@@ -331,6 +335,28 @@ export function scanSettingsHooks(settingsPath: string): SettingsHookScan {
 
 import { cpSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
+/**
+ * Windows only grants directory-symlink creation to elevated shells or machines
+ * with Developer Mode on, so symlinkSync() fails EPERM on a default install and
+ * the USER separation contract never lands. A junction targets a local directory
+ * with the same read/write semantics, needs no elevation, and lstat() still
+ * reports it as a link — so the contract check passes unchanged. Prefer it on
+ * win32, keep POSIX on a plain symlink, and fall back if junction creation fails
+ * (e.g. a target on a different volume).
+ */
+function linkDir(target: string, path: string): void {
+  if (process.platform === "win32") {
+    try {
+      symlinkSync(target, path, "junction");
+      return;
+    } catch {
+      // fall through — Developer Mode may still permit a plain symlink
+    }
+  }
+  symlinkSync(target, path);
+}
+
 
 // Extended 2026-07-25 (Forge finding, v7.15.0 re-audit). The set stopped at .ts,
 // so every Pulse component and the built Next bundle were invisible to
@@ -604,9 +630,10 @@ export function setupUserSeparation(
     copied = merged.copied;
     try {
       mkdirSync(dirname(liveUserDir), { recursive: true });
-      // "junction" on win32: directory junctions need no elevation, plain symlinks
-      // EPERM without Developer Mode (windows-port W2; sibling of #1730's fix).
-      symlinkSync(dataUserDir, liveUserDir, process.platform === "win32" ? "junction" : null);
+      // linkDir: "junction" on win32 (needs no elevation, unlike plain symlinks
+      // which EPERM without Developer Mode), falling back to a plain symlink
+      // (windows-port W2; sibling of #1730's fix).
+      linkDir(dataUserDir, liveUserDir);
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir };
     } catch (err) {
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir, error: `symlink creation failed (live USER preserved at ${backupDir}): ${err instanceof Error ? err.message : String(err)}` };
@@ -616,7 +643,7 @@ export function setupUserSeparation(
   // Branch (c): fresh install — scaffold the data home (if empty) + symlink.
   try {
     mkdirSync(dirname(liveUserDir), { recursive: true });
-    symlinkSync(dataUserDir, liveUserDir, process.platform === "win32" ? "junction" : null); // windows-port W2
+    linkDir(dataUserDir, liveUserDir); // windows-port W2
     return { action: "scaffolded-linked", target: dataUserDir, copied };
   } catch (err) {
     return { action: "scaffolded-linked", target: dataUserDir, copied, error: `symlink creation failed: ${err instanceof Error ? err.message : String(err)}` };

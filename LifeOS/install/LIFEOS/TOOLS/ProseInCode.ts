@@ -26,7 +26,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const ROOT = join(process.env.HOME!, ".claude");
+const ROOT = join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude");
 const DEFAULT_SCAN = ["hooks", "LIFEOS/TOOLS", "LIFEOS/ATLAS", "LIFEOS/PULSE/modules", "skills"];
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "Plugins", "LIFEOS_RELEASES", "archive", "dist", "build", "MEMORY"]);

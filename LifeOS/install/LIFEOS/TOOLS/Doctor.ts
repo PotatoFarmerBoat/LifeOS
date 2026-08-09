@@ -41,7 +41,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, readdirS
 import { join, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const CONFIG_ROOT = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude');
 const LIFEOS_DIR = (process.env.LIFEOS_DIR || join(CONFIG_ROOT, 'LIFEOS'))
   .replace(/^\$HOME/, HOME).replace(/^~(?=\/)/, HOME);
@@ -105,11 +105,17 @@ async function run(cmd: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<{ code:
   }
 }
 
+/**
+ * PATH is ';'-delimited on Windows and its executables carry an extension, so
+ * splitting on ':' and probing a bare name reports every tool missing — the
+ * capability table came back all-broken on a working Windows install (gh was
+ * flagged broken with gh.exe on PATH). Bun.which resolves the platform
+ * delimiter and the full PATHEXT set natively, so it replaces the hand-rolled
+ * scan rather than being taught the Windows cases one extension at a time
+ * (windows-port W3).
+ */
 function which(bin: string): boolean {
-  // Bun.which handles the platform PATH delimiter (';' on Windows, ':' elsewhere)
-  // and PATHEXT (.exe/.cmd) — the hand-rolled ':' split read every binary as
-  // missing on win32 (windows-port W3).
-  return !!Bun.which(bin);
+  return whichPath(bin) !== null;
 }
 
 /**
@@ -255,6 +261,20 @@ function chromeBinary(): string | null {
     '/Applications/Nix Apps/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Nix Apps/Brave Browser.app/Contents/MacOS/Brave Browser',
   ];
+  // Windows installs land under Program Files (system-wide) or LOCALAPPDATA
+  // (per-user), and never on PATH — so a box with both Chrome and Brave
+  // installed still reported "no Chrome/Brave/Chromium binary found".
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env['ProgramFiles'], process.env['ProgramFiles(x86)'], process.env['LOCALAPPDATA'],
+    ].filter((r): r is string => Boolean(r));
+    const rels = [
+      'Google\\Chrome\\Application\\chrome.exe',
+      'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      'Chromium\\Application\\chrome.exe',
+    ];
+    for (const root of roots) for (const rel of rels) candidates.push(join(root, rel));
+  }
   const found = candidates.find(existsSync);
   if (found) return found;
   // PATH fallback (public PR #1567, @vibecrypto): Nix profiles expose the
@@ -318,13 +338,25 @@ const CAPS: CapSpec[] = [
       // also needs the interceptor CLI/daemon and a pinned test-profile context.
       // Report "live" only when the runtime setup exists; otherwise say exactly
       // what one-time setup is missing instead of a false green.
-      const cli = which('interceptor') || existsSync(join(HOME, 'Projects', 'interceptor'));
+      // A checkout is not a CLI. The repo's package.json points `interceptor` at
+      // ./dist/interceptor, which only exists after scripts/build.sh runs, so
+      // testing the directory reported a working CLI the moment someone cloned
+      // the repo and read green while nothing was actually runnable.
+      const repo = join(HOME, 'Projects', 'interceptor');
+      const cloned = existsSync(repo);
+      const built = existsSync(join(repo, 'dist', 'interceptor')) ||
+        existsSync(join(repo, 'dist', 'interceptor.exe'));
+      const cli = !!which('interceptor') || built;
       const prefsPath = join(CONFIG_ROOT, 'skills', 'Interceptor', 'preferences.env');
       const hasContext = existsSync(prefsPath) &&
         /^INTERCEPTOR_TEST_CONTEXT_ID=.+/m.test(readFileSync(prefsPath, 'utf8'));
       if (!cli || !hasContext) {
         const missing = [
-          !cli ? 'interceptor CLI/daemon (repo not cloned, binary not on PATH)' : null,
+          !cli
+            ? (cloned
+              ? `interceptor CLI not built (repo is cloned at ${repo} — run its scripts/build.sh, or scripts/install.ps1 on Windows)`
+              : 'interceptor CLI/daemon (repo not cloned, binary not on PATH)')
+            : null,
           !hasContext ? 'pinned test-profile context (INTERCEPTOR_TEST_CONTEXT_ID in preferences.env)' : null,
         ].filter(Boolean).join('; ');
         return { ok: false, detail: `skill + browser present, but runtime setup incomplete: ${missing}` };
@@ -559,7 +591,11 @@ function hookInterpreterProblems(): string[] {
   const seen = new Set<string>();
   for (const raw of commands) {
     // First token wins: `bun x.ts` → bun; `/path/x.hook.ts` → the script itself.
-    const first = raw.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, '') ?? '';
+    // Match the quotes BEFORE the whitespace: splitting first tears a quoted
+    // Windows path in half, so `"C:/Program Files/Git/bin/bash.exe" x.sh` was
+    // probed as `C:/Program` and reported `Program: file not found`.
+    const m = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(raw);
+    const first = m ? (m[1] ?? m[2] ?? m[3] ?? '') : '';
     if (!first || seen.has(first)) continue;
     seen.add(first);
     const resolved = expandPath(first);
@@ -574,6 +610,11 @@ function hookInterpreterProblems(): string[] {
     }
     // A path was given. If it's a script run bare, exec() needs mode + shebang.
     if (!existsSync(resolved)) { problems.push(`${basename(resolved)}: file not found`); continue; }
+    // Windows has no execute bit and CreateProcess ignores `#!` — every path
+    // hook, `bun.exe` included, came back `not executable (chmod +x)`. Existence
+    // is the whole test there; the POSIX pair below only means something on
+    // POSIX.
+    if (process.platform === 'win32') continue;
     let mode = 0;
     try { mode = statSync(resolved).mode; } catch {}
     const name = basename(resolved);

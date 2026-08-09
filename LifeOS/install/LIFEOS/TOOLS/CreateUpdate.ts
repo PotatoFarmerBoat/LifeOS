@@ -22,7 +22,7 @@ import { parseArgs } from "util";
 
 // LIFEOS_DIR already IS .../LIFEOS — fallback must match UpdateIndex.ts, else the
 // two tools fork the registry in a bare environment (found 2026-07-19 Ledger unification).
-const LIFEOS_DIR = process.env.LIFEOS_DIR || `${process.env.HOME}/.claude/LIFEOS`;
+const LIFEOS_DIR = process.env.LIFEOS_DIR || `${(process.env.HOME ?? process.env.USERPROFILE)}/.claude/LIFEOS`;
 const UPDATES_DIR = join(LIFEOS_DIR, "MEMORY/SYSTEMUPDATES");
 const INDEX_PATH = join(UPDATES_DIR, "INDEX.md");
 

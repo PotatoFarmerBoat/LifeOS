@@ -27,10 +27,10 @@ import { createHash } from "crypto";
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const v = process.env[k];
-  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
 }
 
-const BASE_DIR = process.env.LIFEOS_DIR || join(process.env.HOME!, ".claude", "LIFEOS");
+const BASE_DIR = process.env.LIFEOS_DIR || join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude", "LIFEOS");
 const UPGRADES_DIR = join(BASE_DIR, "MEMORY", "UPGRADES");
 const RECORDS_DIR = join(UPGRADES_DIR, "records");
 const STATE_FILE = join(UPGRADES_DIR, ".state.json");

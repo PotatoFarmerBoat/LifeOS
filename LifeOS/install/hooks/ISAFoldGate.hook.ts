@@ -36,7 +36,7 @@ import { isaEditedThisTurn, ISA_ADDRESSED_RE } from "./ISACloseGate.hook";
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 
-const LIFEOS = process.env.LIFEOS_DIR || join(process.env.HOME!, ".claude", "LIFEOS");
+const LIFEOS = process.env.LIFEOS_DIR || join((process.env.HOME ?? process.env.USERPROFILE)!, ".claude", "LIFEOS");
 const OBS_PATH = join(LIFEOS, "MEMORY", "OBSERVABILITY", "isa-fold-gate.jsonl");
 
 /** Prod-mutating command shapes. Conservative and explicit: each one is a class this
