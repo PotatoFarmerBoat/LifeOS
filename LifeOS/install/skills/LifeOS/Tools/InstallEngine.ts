@@ -105,7 +105,12 @@ export function detectOS(): OsInfo {
 }
 
 export function detectTool(name: string, versionCmd: string): ToolInfo {
-  const path = tryExec(`command -v ${name}`);
+  // `command -v` is a POSIX shell builtin; cmd.exe has no equivalent, so on
+  // Windows every probe failed and DetectEnv reported bun and git missing on a
+  // machine that was, at that moment, running this file under bun. `where` is
+  // the Windows lookup and prints one match per line.
+  const probe = process.platform === "win32" ? `where ${name}` : `command -v ${name}`;
+  const path = tryExec(probe)?.split(/\r?\n/)[0]?.trim();
   if (!path) return { installed: false };
   const out = tryExec(versionCmd);
   const m = out?.match(/(\d+\.\d+[.\d]*)/);
@@ -328,6 +333,28 @@ export function scanSettingsHooks(settingsPath: string): SettingsHookScan {
 
 import { cpSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
+/**
+ * Windows only grants directory-symlink creation to elevated shells or machines
+ * with Developer Mode on, so symlinkSync() fails EPERM on a default install and
+ * the USER separation contract never lands. A junction targets a local directory
+ * with the same read/write semantics, needs no elevation, and lstat() still
+ * reports it as a link — so the contract check passes unchanged. Prefer it on
+ * win32, keep POSIX on a plain symlink, and fall back if junction creation fails
+ * (e.g. a target on a different volume).
+ */
+function linkDir(target: string, path: string): void {
+  if (process.platform === "win32") {
+    try {
+      symlinkSync(target, path, "junction");
+      return;
+    } catch {
+      // fall through — Developer Mode may still permit a plain symlink
+    }
+  }
+  symlinkSync(target, path);
+}
+
 
 // Extended 2026-07-25 (Forge finding, v7.15.0 re-audit). The set stopped at .ts,
 // so every Pulse component and the built Next bundle were invisible to
@@ -601,7 +628,7 @@ export function setupUserSeparation(
     copied = merged.copied;
     try {
       mkdirSync(dirname(liveUserDir), { recursive: true });
-      symlinkSync(dataUserDir, liveUserDir);
+      linkDir(dataUserDir, liveUserDir);
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir };
     } catch (err) {
       return { action: "linked", target: dataUserDir, copied, overwritten: merged.overwritten, preserved: merged.preserved, backup: backupDir, error: `symlink creation failed (live USER preserved at ${backupDir}): ${err instanceof Error ? err.message : String(err)}` };
@@ -611,7 +638,7 @@ export function setupUserSeparation(
   // Branch (c): fresh install — scaffold the data home (if empty) + symlink.
   try {
     mkdirSync(dirname(liveUserDir), { recursive: true });
-    symlinkSync(dataUserDir, liveUserDir);
+    linkDir(dataUserDir, liveUserDir);
     return { action: "scaffolded-linked", target: dataUserDir, copied };
   } catch (err) {
     return { action: "scaffolded-linked", target: dataUserDir, copied, error: `symlink creation failed: ${err instanceof Error ? err.message : String(err)}` };
