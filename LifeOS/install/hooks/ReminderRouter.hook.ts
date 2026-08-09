@@ -26,7 +26,7 @@ import { createHash } from "crypto";
 import { join, dirname } from "path";
 import { loadWorkConfig } from "./lib/work-config";
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const STATE_PATH = join(HOME, ".claude", "LIFEOS", "MEMORY", "STATE", "reminder-router-seen.json");
 
 interface HookInput {
@@ -207,7 +207,7 @@ async function main(): Promise<void> {
 
   let input: HookInput;
   try {
-    input = JSON.parse(readFileSync("/dev/stdin", "utf-8"));
+    input = JSON.parse(readFileSync(0, "utf-8"));
   } catch {
     process.exit(0);
   }
