@@ -183,7 +183,7 @@ function emitContinueAndExit(): never {
 }
 
 async function main() {
-  const filePath: string = input?.tool_input?.file_path || '';
+  const filePath: string = (input?.tool_input?.file_path || '').replaceAll('\\', '/'); // windows-port W8 (#1119 class)
   if (!filePath.includes('MEMORY/WORK/')) return;
   const isISA = filePath.endsWith('/' + ARTIFACT_FILENAME) || filePath.endsWith(ARTIFACT_FILENAME);
   const isLegacyPRD = filePath.endsWith('/' + LEGACY_ARTIFACT_FILENAME) || filePath.endsWith(LEGACY_ARTIFACT_FILENAME);

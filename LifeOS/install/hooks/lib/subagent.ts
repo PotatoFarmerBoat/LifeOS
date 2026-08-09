@@ -21,7 +21,7 @@
 
 /** True when this process is a subagent/delegate rather than the main session. */
 export function isSubagentContext(): boolean {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR || '';
+  const projectDir = (process.env.CLAUDE_PROJECT_DIR || '').replaceAll('\\', '/'); // windows-port W8
   return Boolean(
     projectDir.includes('/.claude/Agents/') ||
       process.env.CLAUDE_AGENT_TYPE ||

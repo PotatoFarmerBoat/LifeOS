@@ -48,7 +48,9 @@ async function main() {
   // Only trigger for ISA.md (or legacy PRD.md) files in MEMORY/WORK/.
   // (The per-tool-call liveness heartbeat lives in EventLogger.hook.ts, which
   // fires on every PostToolUse — one home, 2026-07-15 consolidation.)
-  const filePath = toolInput.file_path || '';
+  // win32 file_path arrives backslashed — normalize once so every '/'-built
+  // pattern below applies; node fs accepts '/' on Windows (windows-port W8, #1119 class).
+  const filePath = (toolInput.file_path || '').replaceAll('\\', '/');
   if (!filePath.includes('MEMORY/WORK/')) return;
   const isISA = filePath.endsWith('/' + ARTIFACT_FILENAME) || filePath.endsWith(ARTIFACT_FILENAME);
   const isLegacyPRD = filePath.endsWith('/' + LEGACY_ARTIFACT_FILENAME) || filePath.endsWith(LEGACY_ARTIFACT_FILENAME);
