@@ -121,3 +121,22 @@ Remove-Item -Recurse -Force "$env:USERPROFILE\.claude\LIFEOS", "$env:USERPROFILE
 
 (`~/.config/LIFEOS/USER` holds your data — it is deliberately not in the
 rollback line. Delete it only if you mean it.)
+
+## Troubleshooting breadcrumbs (every entry was hit for real, 2026-08-09)
+
+| Symptom | Cause → fix |
+|---|---|
+| Files land in a relative `.claude` or weird paths during install | `HOME` unset (Windows never sets it) → `$env:HOME = $env:USERPROFILE` in the session first |
+| DetectEnv says bun/git not installed though they run | You're on upstream/pre-fix code — must be `windows-port` (fix: `Bun.which` replaced `command -v`, InstallEngine.ts) |
+| LinkUser fails EPERM on symlink | Pre-fix branch; `windows-port` uses junctions (no elevation) |
+| Doctor: "not executable (chmod +x)" ×31 / "bun: not on PATH" | Pre-fix Doctor lying — hooks actually fire (proven live). Doctor on `windows-port` checks correctly |
+| `ENOENT uv_spawn 'claude'` from any tool | npm ships only `.cmd`/`.ps1` shims, no claude.exe; bare `spawn("claude")` dies. Pattern: `claudeArgv()` in lifeos.ts — resolve with `Bun.which`, route `.cmd` via `cmd /c` |
+| A hook "doesn't fire" when you test it by piping JSON in PowerShell | PS native-pipe encoding breaks the JSON parse and `catch → exit 0` masks it as a guard rejection. **Always file-redirect:** `bun X.hook.ts < envelope.json` |
+| A hook or tool hangs forever | Something shelled to POSIX `find`; `System32\find.exe` shadows it and blocks reading stdin. Known callers: IntegrityCheck's `findFiles` (audit before W10) |
+| Hooks silently no-op only on Windows | Backslashed `file_path` vs `'/'`-built string compares (#1119 class). Fixed in 6 files on this branch; the pattern for new code: normalize `.replaceAll('\\','/')` at entry. Regression tests: `Probes/windows/w8.pathform.test.ts` |
+| SessionEnd hooks say "Hook cancelled" under `claude -p` | Print-mode teardown grace, NOT a defect — each exits rc=0 standalone. Interactive sessions are the real path |
+| Your hand-built `settings.json` rules vanish after a session | The MergeSettings SessionStart hook took ownership (you installed without `--omit MergeSettings.ts`). Restore newest `settings.json.lifeos-backup-*`, reinstall hooks with the omit |
+| `gh` commands hit danielmiessler/LifeOS instead of the fork | gh resolves the upstream remote — use `-R PotatoFarmerBoat/LifeOS` or `gh repo set-default` |
+| No "Run workflow" button for windows-probes | Workflow lives only on `windows-port`, not the default branch — trigger by pushing to the branch |
+
+**Map of everything:** fork `PotatoFarmerBoat/LifeOS`, branch `windows-port` (green CI baseline: run 31302180037). Clone `C:\Users\zachary.simandl\code\LifeOS`. Disposable probe sandbox `C:\Users\zachary.simandl\code\lifeos-sandbox` (safe to delete whole). Separate installs that do NOT share config: WSL Ubuntu (`wsl -d Ubuntu`, user `zac`, launch with `lifeos`) and the Cowork VM bootstrap kit (`External Brain\_lifeos-cowork\BOOTSTRAP.md`). Evidence for every closed claim: `WINDOWS-PORT-ISA.md` Log.
