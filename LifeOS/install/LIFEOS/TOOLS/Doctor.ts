@@ -269,6 +269,20 @@ function chromeBinary(): string | null {
     '/Applications/Nix Apps/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Nix Apps/Brave Browser.app/Contents/MacOS/Brave Browser',
   ];
+  // Windows installs land under Program Files (system-wide) or LOCALAPPDATA
+  // (per-user), and never on PATH — so a box with both Chrome and Brave
+  // installed still reported "no Chrome/Brave/Chromium binary found".
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env['ProgramFiles'], process.env['ProgramFiles(x86)'], process.env['LOCALAPPDATA'],
+    ].filter((r): r is string => Boolean(r));
+    const rels = [
+      'Google\\Chrome\\Application\\chrome.exe',
+      'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      'Chromium\\Application\\chrome.exe',
+    ];
+    for (const root of roots) for (const rel of rels) candidates.push(join(root, rel));
+  }
   const found = candidates.find(existsSync);
   if (found) return found;
   // PATH fallback (public PR #1567, @vibecrypto): Nix profiles expose the
@@ -573,7 +587,11 @@ function hookInterpreterProblems(): string[] {
   const seen = new Set<string>();
   for (const raw of commands) {
     // First token wins: `bun x.ts` → bun; `/path/x.hook.ts` → the script itself.
-    const first = raw.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, '') ?? '';
+    // Match the quotes BEFORE the whitespace: splitting first tears a quoted
+    // Windows path in half, so `"C:/Program Files/Git/bin/bash.exe" x.sh` was
+    // probed as `C:/Program` and reported `Program: file not found`.
+    const m = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(raw);
+    const first = m ? (m[1] ?? m[2] ?? m[3] ?? '') : '';
     if (!first || seen.has(first)) continue;
     seen.add(first);
     const resolved = expandPath(first);
@@ -588,6 +606,11 @@ function hookInterpreterProblems(): string[] {
     }
     // A path was given. If it's a script run bare, exec() needs mode + shebang.
     if (!existsSync(resolved)) { problems.push(`${basename(resolved)}: file not found`); continue; }
+    // Windows has no execute bit and CreateProcess ignores `#!` — every path
+    // hook, `bun.exe` included, came back `not executable (chmod +x)`. Existence
+    // is the whole test there; the POSIX pair below only means something on
+    // POSIX.
+    if (process.platform === 'win32') continue;
     let mode = 0;
     try { mode = statSync(resolved).mode; } catch {}
     const name = basename(resolved);
