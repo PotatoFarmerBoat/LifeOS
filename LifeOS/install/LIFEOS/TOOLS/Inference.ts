@@ -281,6 +281,7 @@ async function inferenceAttempt(options: InferenceOptions, modelOverride?: strin
     const proc = spawn(resolveClaudeBin(), args, {
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,   // Windows: a console app child otherwise flashes its own console window
     });
 
     // #1158: `claude --print` parses a leading-slash prompt ("/interview") as a
