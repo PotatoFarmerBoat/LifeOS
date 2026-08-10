@@ -680,9 +680,28 @@ type HooksMap = Record<string, MatcherGroup[]>;
  * Normalize a hook command for dedup: collapse the harness/PAI path-var forms to
  * a single canonical token and squeeze whitespace, so the same hook expressed as
  * `${LIFEOS_DIR}/x`, `$LIFEOS_DIR/x`, or `~/.claude/x` dedupes to one.
+ *
+ * Windows adds two more spellings of the same hook. InstallHooks.portHooksForWindows
+ * rewrites `$HOME/.claude/hooks/X.hook.ts` into `"<abs bun>" "<abs script>"` BEFORE
+ * mergeHooks sees it, so on a second run neither the pinned interpreter prefix nor
+ * the expanded absolute root matched the installed POSIX form: every entry keyed
+ * differently, deduped against nothing, and re-applying InstallHooks appended a
+ * duplicate of all 52 hooks — each one then firing twice. Strip the interpreter and
+ * fold the absolute root back to $HOME/.claude so both spellings share a key.
  */
 function normalizeCommand(cmd: string): string {
-  return cmd
+  const home = (process.env.HOME ?? process.env.USERPROFILE ?? "").split("\\").join("/").replace(/\/+$/, "");
+  let c = cmd.split("\\").join("/");
+  // Leading interpreter, bare (`bun x.ts`) or pinned (`"C:/.../bun.exe" "x.ts"`).
+  // The quoted branch is separate because Git Bash lives under "Program Files" —
+  // a path with a space, which an unquoted [^\s]* run can never span.
+  c = c.replace(
+    /^(?:"[^"]*\/(?:bun|bash|sh|node)(?:\.exe)?"|(?:[^"\s]*\/)?(?:bun|bash|sh|node)(?:\.exe)?)\s+/i,
+    "",
+  );
+  c = c.replace(/"/g, "");
+  if (home) c = c.split(`${home}/.claude`).join("$HOME/.claude");
+  return c
     .replace(/\$\{?LIFEOS_DIR\}?|\$\{?CLAUDE_PROJECT_DIR\}?|\$\{?CLAUDE_PLUGIN_ROOT\}?|~\/\.claude|\$HOME\/\.claude|\$\{HOME\}\/\.claude/g, "§ROOT§")
     .replace(/\s+/g, " ")
     .trim();

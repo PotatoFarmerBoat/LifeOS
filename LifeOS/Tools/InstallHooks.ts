@@ -139,11 +139,18 @@ function main(): void {
     console.log(JSON.stringify({ ok: false, error: `payload hooks.json not found at ${hooksJsonPath}` }, null, 2));
     process.exit(1);
   }
-  const incoming = portHooksForWindows(JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {});
+  const incoming = JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {};
 
   // Apply --omit filters to the payload before the merge sees it. Buckets that
   // empty out are dropped whole; the count is reported so a dry run shows
   // exactly what an omit costs.
+  //
+  // This MUST run before portHooksForWindows. That pass splits `;`-chained
+  // commands into one entry each, and the documented `--omit MergeSettings.ts`
+  // relies on matching the whole chain so the paired SettingsBackport step goes
+  // with it ("that pair only makes sense together" — WINDOWS-INSTALL.md). Split
+  // first and the omit matches only the MergeSettings half, silently leaving an
+  // orphaned SettingsBackport hook on Windows and nowhere else.
   let omitted = 0;
   if (omits.length) {
     for (const event of Object.keys(incoming)) {
@@ -160,6 +167,9 @@ function main(): void {
       if (!incoming[event].length) delete incoming[event];
     }
   }
+
+  // Now rewrite what survived into Windows-executable form (no-op off win32).
+  portHooksForWindows(incoming);
 
   // The hook SCRIPTS (*.hook.ts|sh + lib/**) live beside hooks.json in the payload.
   // Merging hooks.json into settings.json wires commands that point at these files,
