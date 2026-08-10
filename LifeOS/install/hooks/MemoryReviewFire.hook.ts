@@ -135,7 +135,7 @@ function spawnReviewer(turnsReviewed: number, transcriptPath: string | null): { 
     const proc = spawn("bun", args, {
       env,
       stdio: "ignore",
-      detached: true,
+      detached: true, windowsHide: true,
     });
     proc.unref();
     return { spawned: true, reason: `pid=${proc.pid}` };

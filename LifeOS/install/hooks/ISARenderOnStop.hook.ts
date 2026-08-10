@@ -92,7 +92,7 @@ for (const isaPath of edited) {
   }
   try {
     const proc = spawn('bun', [ISA_RENDER, isaPath], {
-      detached: true,
+      detached: true, windowsHide: true,
       stdio: 'ignore',
     });
     proc.unref();

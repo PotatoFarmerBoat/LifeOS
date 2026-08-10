@@ -130,7 +130,7 @@ async function main() {
     try {
       const isaRender = join(homedir(), '.claude/LIFEOS/TOOLS/ISARender.ts');
       const proc = spawn('bun', [isaRender, isaPath], {
-        detached: true,
+        detached: true, windowsHide: true,
         stdio: 'ignore',
       });
       proc.unref();
