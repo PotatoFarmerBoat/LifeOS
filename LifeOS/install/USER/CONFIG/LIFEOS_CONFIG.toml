@@ -42,6 +42,14 @@ speed = 1.1
 use_speaker_boost = true
 volume = 1.0
 
+[telos]
+# Which TELOS dimensions this install tracks. Leave the key commented out to
+# track all seven (health, money, freedom, creative, relationships, rhythms,
+# infrastructure) — the default. Narrow it if your install only covers some of
+# life: anything left out reports "no signal" rather than 0%, because a
+# dimension you do not measure is not a dimension scoring zero.
+# dimensions = ["rhythms", "infrastructure"]
+
 [integrations.cloudflare]
 # Token lives in ~/.claude/.env (never here). Account ID is non-secret.
 token_env_var = "CLOUDFLARE_API_TOKEN"

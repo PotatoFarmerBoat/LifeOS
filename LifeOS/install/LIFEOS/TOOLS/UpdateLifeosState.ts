@@ -20,7 +20,15 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
  * The fallback measures whether the principal has articulated what "good"
  * looks like; the primary path measures whether reality matches it.
  *
- * Reads:  LIFEOS/USER/TELOS/IDEAL_STATE/<DIM>.md (target articulation)
+ * Scope:
+ *   `[telos] dimensions` in LIFEOS_CONFIG.toml narrows which dimensions this
+ *   install tracks. Omit the key to track all seven — the template default.
+ *   Anything left out reports `pct: null` + `scope: "out"`, so the statusline
+ *   and Pulse render "no signal" instead of a 0% that reads as a real score.
+ *   A dimension the install does not measure is not a dimension scoring zero.
+ *
+ * Reads:  LIFEOS/USER/CONFIG/LIFEOS_CONFIG.toml (scope, optional)
+ *         LIFEOS/USER/TELOS/IDEAL_STATE/<DIM>.md (target articulation)
  *         LIFEOS/USER/TELOS/CURRENT_STATE/<DIM>.md (actual coverage, when present)
  * Writes: LIFEOS/USER/TELOS/LIFEOS_STATE.json
  *
@@ -35,6 +43,7 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
+import { loadLifeosConfig } from "./LifeosConfig";
 
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
@@ -66,6 +75,34 @@ interface DimensionState {
   tbd_count: number;
   last_updated: string | null;
   source_file: string;
+  /** "out" = this install does not track the dimension; pct is null by scope, not by absence of data. */
+  scope: "in" | "out";
+}
+
+/**
+ * Dimensions this install tracks. Missing or unreadable config means all of
+ * them — a fresh install with no config must still produce a full state file.
+ * An id that is not a real dimension is a typo that would silently zero a
+ * dimension, so it fails loud rather than being ignored.
+ */
+function activeDimensionIds(): Set<DimensionId> {
+  const all = new Set(DIMENSIONS.map((d) => d.id));
+  let configured: string[] | undefined;
+  try {
+    configured = loadLifeosConfig().telos.dimensions;
+  } catch {
+    return all;
+  }
+  if (!configured) return all;
+
+  const unknown = configured.filter((id) => !all.has(id as DimensionId));
+  if (unknown.length > 0) {
+    throw new Error(
+      `[UpdateLifeosState] [telos] dimensions names unknown dimension(s): ${unknown.join(", ")}. ` +
+        `Valid ids: ${[...all].join(", ")}.`,
+    );
+  }
+  return new Set(configured as DimensionId[]);
 }
 
 interface LifeosState {
@@ -82,7 +119,9 @@ function readFrontmatterDate(content: string): string | null {
   return m ? m[1].replace(/^["']|["']$/g, "") : null;
 }
 
-function computeFromCurrent(file: string): DimensionState | null {
+type DimensionScore = Omit<DimensionState, "scope">;
+
+function computeFromCurrent(file: string): DimensionScore | null {
   const path = join(CURRENT_DIR, file);
   if (!existsSync(path)) return null;
   const content = readFileSync(path, "utf-8");
@@ -114,7 +153,7 @@ function computeFromCurrent(file: string): DimensionState | null {
   };
 }
 
-function computeFromIdeal(file: string): DimensionState {
+function computeFromIdeal(file: string): DimensionScore {
   const path = join(IDEAL_DIR, file);
   if (!existsSync(path)) {
     return { pct: null, tbd_count: 0, last_updated: null, source_file: file };
@@ -131,13 +170,20 @@ function computeFromIdeal(file: string): DimensionState {
 }
 
 function computeState(file: string): DimensionState {
-  return computeFromCurrent(file) ?? computeFromIdeal(file);
+  return { ...(computeFromCurrent(file) ?? computeFromIdeal(file)), scope: "in" };
+}
+
+// An out-of-scope dimension is reported, not omitted: consumers keep a stable
+// key set, and `pct: null` is the value they already render as "no signal".
+function outOfScopeState(file: string): DimensionState {
+  return { pct: null, tbd_count: 0, last_updated: null, source_file: file, scope: "out" };
 }
 
 function build(): LifeosState {
+  const active = activeDimensionIds();
   const dimensions = {} as Record<DimensionId, DimensionState>;
   for (const d of DIMENSIONS) {
-    dimensions[d.id] = computeState(d.file);
+    dimensions[d.id] = active.has(d.id) ? computeState(d.file) : outOfScopeState(d.file);
   }
   return {
     generated_at: new Date().toISOString(),
@@ -157,7 +203,11 @@ function main(): void {
     for (const d of DIMENSIONS) {
       const s = state.dimensions[d.id];
       const pctStr = s.pct === null ? "—" : `${s.pct}%`;
-      console.log(`  ${d.id.padEnd(14)} ${pctStr.padStart(5)}  (${s.tbd_count} TBDs, updated ${s.last_updated ?? "unknown"})`);
+      const detail =
+        s.scope === "out"
+          ? "not tracked — [telos] dimensions"
+          : `${s.tbd_count} TBDs, updated ${s.last_updated ?? "unknown"}`;
+      console.log(`  ${d.id.padEnd(14)} ${pctStr.padStart(5)}  (${detail})`);
     }
   }
 }

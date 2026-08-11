@@ -77,11 +77,22 @@ export interface LifeosPaths {
   projectsDir: string;
 }
 
+export interface LifeosTelos {
+  /**
+   * Which TELOS dimensions this install actually tracks. Absent means all of
+   * them — the template default. A professional-only install narrows it so the
+   * personal dimensions read "no signal" instead of a false 0%.
+   * Consumed by LIFEOS/TOOLS/UpdateLifeosState.ts.
+   */
+  dimensions?: string[];
+}
+
 export interface LifeosConfig {
   principal: LifeosPrincipal;
   da: LifeosDa;
   integrations: LifeosIntegrations;
   paths: LifeosPaths;
+  telos: LifeosTelos;
 }
 
 // ─────────── Resolution ───────────
@@ -196,6 +207,11 @@ function validateAndNormalize(raw: unknown, path: string): LifeosConfig {
         : undefined,
       cloudflare: root.integrations?.cloudflare,
     },
+    telos: {
+      // Validated as shape only — this loader has no dimension vocabulary.
+      // UpdateLifeosState.ts owns the id list and fails loud on an unknown one.
+      dimensions: normalizeTelosDimensions(root.telos?.dimensions, path),
+    },
     paths: {
       userDir: expandHome(
         root.paths?.userDir ?? root.paths?.user_dir ?? resolve(DEFAULT_HOME, ".claude/LIFEOS/USER"),
@@ -205,6 +221,22 @@ function validateAndNormalize(raw: unknown, path: string): LifeosConfig {
       ),
     },
   };
+}
+
+function normalizeTelosDimensions(v: unknown, path: string): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || v.some((d) => typeof d !== "string" || !d)) {
+    throw new Error(
+      `LifeosConfig: [telos] dimensions must be an array of non-empty strings — see ${path}`,
+    );
+  }
+  if (v.length === 0) {
+    throw new Error(
+      `LifeosConfig: [telos] dimensions is empty — omit the key to track every dimension, ` +
+        `rather than declaring none — see ${path}`,
+    );
+  }
+  return v.map((d) => (d as string).trim().toLowerCase());
 }
 
 function normalizeVoice(v: any): LifeosVoiceSettings {
