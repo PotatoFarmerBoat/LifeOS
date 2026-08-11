@@ -1,8 +1,14 @@
 name: Claude Code Review
 
+# Auto-run disabled 2026-08-11. The action requires CLAUDE_CODE_OAUTH_TOKEN (or
+# ANTHROPIC_API_KEY, or federation), and this fork has no repository secrets set,
+# so every pull_request run died in ~15s on env-variable validation and reported
+# a red check that said nothing about the code. Manual dispatch only until a
+# token exists; restore the pull_request block below to bring auto-review back.
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+  workflow_dispatch:
+  # pull_request:
+  #   types: [opened, synchronize, ready_for_review, reopened]
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
