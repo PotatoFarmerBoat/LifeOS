@@ -6,7 +6,7 @@ import { renderShell, renderPage, renderEmpty } from "../ui/render";
 import { readIndex, readPage } from "../lib/data-plane";
 import { loadAllManifests } from "../lib/manifest-loader";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const SNAP_DIR = resolve(HOME, ".claude", "LIFEOS", "PULSE", "Schema", "Snapshots");
 mkdirSync(SNAP_DIR, { recursive: true });
 

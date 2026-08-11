@@ -22,7 +22,7 @@
  *   (dry-run by default — reports the plan per target without writing)
  */
 
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { copyMissing, detectDevTree } from "./InstallEngine";
@@ -199,6 +199,40 @@ function scaffoldMemory(configRoot: string, apply: boolean): DeployResult {
  * that resolve via node_modules walked up from configRoot — without this step
  * those scripts throw "Cannot find package" on first run after a fresh install.
  */
+
+/**
+ * copyMissing() skips a destination that already exists, so any pre-existing
+ * <configRoot>/package.json — a bare {"type":"commonjs"} stub is enough — leaves
+ * the runtime dependencies undeclared. `bun install` then installs nothing and
+ * every hook importing yaml throws "Cannot find package" on first run, which is
+ * precisely the failure this step exists to prevent. Merge our dependencies into
+ * the existing manifest instead, never overwriting a range the user already
+ * pinned and never touching their other fields.
+ */
+function mergeDependencies(src: string, dst: string): { detail: string; failures: string[] } {
+  try {
+    const payload = JSON.parse(readFileSync(src, "utf-8")) as { dependencies?: Record<string, string> };
+    const existing = JSON.parse(readFileSync(dst, "utf-8")) as Record<string, unknown>;
+    const deps = (existing.dependencies ?? {}) as Record<string, string>;
+    const added: string[] = [];
+    for (const [name, range] of Object.entries(payload.dependencies ?? {})) {
+      if (!deps[name]) {
+        deps[name] = range;
+        added.push(name + "@" + range);
+      }
+    }
+    if (added.length === 0) return { detail: "dependencies already declared in " + dst, failures: [] };
+    existing.dependencies = deps;
+    writeFileSync(dst, JSON.stringify(existing, null, 2) + "\n");
+    return { detail: "merged into " + dst + ": " + added.join(", "), failures: [] };
+  } catch (err) {
+    return {
+      detail: "could not merge dependencies into " + dst,
+      failures: ["dependency merge failed: " + (err instanceof Error ? err.message : String(err))],
+    };
+  }
+}
+
 function deployDependencies(payloadInstall: string, configRoot: string, apply: boolean): DeployResult {
   const src = join(payloadInstall, "package.json");
   const dst = join(configRoot, "package.json");
@@ -208,10 +242,20 @@ function deployDependencies(payloadInstall: string, configRoot: string, apply: b
     return r;
   }
   if (!apply) {
-    r.actions.push(`copyMissing ${src} → ${dst}`, `bun install --cwd ${configRoot}`);
+    r.actions.push(existsSync(dst) ? `merge dependencies ${src} → ${dst}` : `copyMissing ${src} → ${dst}`, `bun install --cwd ${configRoot}`);
     return r;
   }
-  const { copied, failures } = copyMissing(src, dst);
+  let copied = 0;
+  let failures: string[] = [];
+  if (existsSync(dst)) {
+    const merged = mergeDependencies(src, dst);
+    r.actions.push(merged.detail);
+    failures = merged.failures;
+  } else {
+    const res = copyMissing(src, dst);
+    copied = res.copied;
+    failures = res.failures;
+  }
   r.copied = copied;
   r.failures = failures;
   if (failures.length === 0) {
@@ -309,7 +353,7 @@ function deployNestedDependencies(configRoot: string, apply: boolean): DeployRes
 
 function main(): void {
   const a = process.argv.slice(2);
-  const home = process.env.HOME || homedir();
+  const home = (process.env.HOME ?? process.env.USERPROFILE) || homedir();
   const configRoot = arg(a, "--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
   const skillRoot = arg(a, "--skill-root") || join(import.meta.dir, "..");
   const payloadInstall = join(skillRoot, "install");

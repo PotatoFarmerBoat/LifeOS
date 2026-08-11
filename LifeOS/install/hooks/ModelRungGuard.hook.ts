@@ -3,7 +3,7 @@
 // in LIFEOS_DIR/LIFEOS_CONFIG_DIR/PROJECTS_DIR resolves to a shadow dir (#1404 / PR #1451, author jbmml).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
 }
 
 /**
@@ -39,7 +39,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "n
 import { join } from "node:path";
 
 const STDIN_TIMEOUT_MS = 300;
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const CLAUDE_ROOT = join(HOME, ".claude");
 const LIFEOS_DIR = process.env.LIFEOS_DIR || join(CLAUDE_ROOT, "LIFEOS");
 const SETTINGS_PATH = join(CLAUDE_ROOT, "settings.json");

@@ -18,7 +18,7 @@
 import { join } from "node:path"
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from "node:fs"
 
-const HOME = process.env.HOME ?? ""
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? ""
 const CACHE_DIR = join(HOME, ".claude", "LIFEOS", "MEMORY", "_AIRGRADIENT")
 const LATEST = join(CACHE_DIR, "latest.json")
 const HISTORY = join(CACHE_DIR, "history.jsonl")

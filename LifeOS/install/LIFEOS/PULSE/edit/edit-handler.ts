@@ -4,7 +4,7 @@ import { atomicWriteText } from "../lib/atomic-write";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter";
 import { sha256Hex } from "../lib/cache";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const USER_ROOT = resolve(HOME, ".claude", "LIFEOS", "USER");
 const EDITS_LOG = resolve(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY", "pulse-edits.jsonl");
 const CONTAINMENT_PREFIX_DENY = ["MEMORY/PULSE_DATA", "MEMORY/OBSERVABILITY"];

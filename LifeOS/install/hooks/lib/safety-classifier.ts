@@ -185,8 +185,11 @@ function trustedCommandForms(): readonly string[] {
   const forms: string[] = [];
   for (const prefix of TRUSTED_PREFIXES) {
     forms.push(prefix);
-    if (prefix.startsWith(HOME + "/")) {
-      const suffix = prefix.slice(HOME.length);
+    // Compare in '/'-form — HOME is backslashed on win32 (windows-port W8).
+    const preSlash = prefix.replaceAll("\\", "/");
+    const homeSlash = HOME.replaceAll("\\", "/");
+    if (preSlash.startsWith(homeSlash + "/")) {
+      const suffix = preSlash.slice(homeSlash.length);
       forms.push("~" + suffix, "$HOME" + suffix, "${HOME}" + suffix);
     }
   }
@@ -201,10 +204,14 @@ export function isTrustedPath(filePath: string): boolean {
   let p = filePath;
   if (p.startsWith("~")) p = HOME + p.slice(1);
   p = p.replace(/\$\{?HOME\}?/g, HOME);
-  const resolved = resolve(p);
-  return TRUSTED_PREFIXES.some(
-    (prefix) => resolved === prefix || resolved.startsWith(prefix + "/"),
-  );
+  // resolve() emits backslashes on win32 while the prefixes are '/'-built —
+  // without normalizing, nothing ever matched and every path read untrusted
+  // (fails closed, but wrongly; windows-port W8, #1119 class).
+  const resolved = resolve(p).replaceAll("\\", "/");
+  return TRUSTED_PREFIXES.some((prefix) => {
+    const pre = prefix.replaceAll("\\", "/");
+    return resolved === pre || resolved.startsWith(pre + "/");
+  });
 }
 
 export function bashTargetsTrustedPath(command: string): boolean {

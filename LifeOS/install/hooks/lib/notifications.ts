@@ -7,15 +7,22 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 const PULSE_TOML_PATH = join(HOME, '.claude/LIFEOS/PULSE/PULSE.toml');
 
 // ============================================================================
 // Session Timing
 // ============================================================================
 
-const SESSION_START_FILE = '/tmp/pai-session-start.txt';
+// Windows has no `/tmp`: the literal path resolves to `C:\tmp`, which exists on
+// no default install, so the write threw straight into the empty catch below and
+// every session silently reported a duration of 0. tmpdir() is the real temp
+// directory there; POSIX keeps the historic `/tmp` so nothing moves on macOS.
+const SESSION_START_FILE = process.platform === 'win32'
+  ? join(tmpdir(), 'pai-session-start.txt')
+  : '/tmp/pai-session-start.txt';
 
 export function recordSessionStart(): void {
   try { writeFileSync(SESSION_START_FILE, Date.now().toString()); } catch {}

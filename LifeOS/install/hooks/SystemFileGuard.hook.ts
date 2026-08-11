@@ -26,7 +26,7 @@ import { homedir } from "node:os";
 import { evaluateWrite, extractNewContent } from "./lib/system-file-guard-core";
 import { parseHookStdin, asWriteToolInput, isString } from "./lib/hook-input";
 
-const HOME = process.env.HOME ?? homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? homedir();
 const LOG_PATH = join(HOME, ".claude/LIFEOS/MEMORY/OBSERVABILITY/system-file-guard.jsonl");
 
 interface HookInput {

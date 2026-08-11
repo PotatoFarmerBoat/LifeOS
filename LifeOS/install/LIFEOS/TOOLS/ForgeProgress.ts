@@ -96,7 +96,7 @@ function validUrl(flag: string, value: string): string {
   try { return new URL(nonEmpty(flag, value)).toString(); }
   catch (error: unknown) { throw new Error(`${flag} must be a valid URL: ${String(error)}`); }
 }
-function homeDir(): string { const home = process.env.HOME; if (!home) throw new Error("HOME is not set"); return home; }
+function homeDir(): string { const home = (process.env.HOME ?? process.env.USERPROFILE); if (!home) throw new Error("HOME is not set"); return home; }
 function preflightCodex(home: string): string | null {
   const codexPath = join(home, ".bun", "bin", "codex");
   try { accessSync(codexPath, constants.X_OK); return codexPath; }

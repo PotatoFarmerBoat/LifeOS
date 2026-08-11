@@ -58,7 +58,7 @@ const basename = (p: string): string => p.split("/").pop() ?? p;
  */
 export function classifySurface(absPath: string, claudeRoot: string): Surface | null {
   if (!absPath) return null;
-  const p = absPath.replace(/\/+$/, "");
+  const p = absPath.replaceAll("\\", "/").replace(/\/+$/, ""); // windows-port W8
   const base = basename(p);
 
   // ISA files are the state-of-record wherever they live — including project
@@ -75,7 +75,7 @@ export function classifySurface(absPath: string, claudeRoot: string): Surface | 
   }
 
   // Everything below is scoped to the installation root.
-  const root = claudeRoot.replace(/\/+$/, "");
+  const root = claudeRoot.replaceAll("\\", "/").replace(/\/+$/, ""); // windows-port W8
   if (!p.startsWith(root + "/")) return null;
   const rel = p.slice(root.length + 1);
 

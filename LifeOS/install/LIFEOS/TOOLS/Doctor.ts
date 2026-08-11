@@ -41,7 +41,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, readdirS
 import { join, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const CONFIG_ROOT = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude');
 const LIFEOS_DIR = (process.env.LIFEOS_DIR || join(CONFIG_ROOT, 'LIFEOS'))
   .replace(/^\$HOME/, HOME).replace(/^~(?=\/)/, HOME);
@@ -105,9 +105,17 @@ async function run(cmd: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<{ code:
   }
 }
 
+/**
+ * PATH is ';'-delimited on Windows and its executables carry an extension, so
+ * splitting on ':' and probing a bare name reports every tool missing — the
+ * capability table came back all-broken on a working Windows install (gh was
+ * flagged broken with gh.exe on PATH). Bun.which resolves the platform
+ * delimiter and the full PATHEXT set natively, so it replaces the hand-rolled
+ * scan rather than being taught the Windows cases one extension at a time
+ * (windows-port W3).
+ */
 function which(bin: string): boolean {
-  const paths = (process.env.PATH || '').split(':');
-  return paths.some(p => p && existsSync(join(p, bin)));
+  return whichPath(bin) !== null;
 }
 
 /**
@@ -116,11 +124,7 @@ function which(bin: string): boolean {
  * '/', so the fallback must yield a real path (public PR #1567, @vibecrypto).
  */
 function whichPath(bin: string): string | null {
-  const paths = (process.env.PATH || '').split(':');
-  for (const p of paths) {
-    if (p && existsSync(join(p, bin))) return join(p, bin);
-  }
-  return null;
+  return Bun.which(bin); // cross-platform (windows-port W3)
 }
 
 function envKey(name: string): string | null {
@@ -257,6 +261,20 @@ function chromeBinary(): string | null {
     '/Applications/Nix Apps/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Nix Apps/Brave Browser.app/Contents/MacOS/Brave Browser',
   ];
+  // Windows installs land under Program Files (system-wide) or LOCALAPPDATA
+  // (per-user), and never on PATH — so a box with both Chrome and Brave
+  // installed still reported "no Chrome/Brave/Chromium binary found".
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env['ProgramFiles'], process.env['ProgramFiles(x86)'], process.env['LOCALAPPDATA'],
+    ].filter((r): r is string => Boolean(r));
+    const rels = [
+      'Google\\Chrome\\Application\\chrome.exe',
+      'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      'Chromium\\Application\\chrome.exe',
+    ];
+    for (const root of roots) for (const rel of rels) candidates.push(join(root, rel));
+  }
   const found = candidates.find(existsSync);
   if (found) return found;
   // PATH fallback (public PR #1567, @vibecrypto): Nix profiles expose the
@@ -320,13 +338,25 @@ const CAPS: CapSpec[] = [
       // also needs the interceptor CLI/daemon and a pinned test-profile context.
       // Report "live" only when the runtime setup exists; otherwise say exactly
       // what one-time setup is missing instead of a false green.
-      const cli = which('interceptor') || existsSync(join(HOME, 'Projects', 'interceptor'));
+      // A checkout is not a CLI. The repo's package.json points `interceptor` at
+      // ./dist/interceptor, which only exists after scripts/build.sh runs, so
+      // testing the directory reported a working CLI the moment someone cloned
+      // the repo and read green while nothing was actually runnable.
+      const repo = join(HOME, 'Projects', 'interceptor');
+      const cloned = existsSync(repo);
+      const built = existsSync(join(repo, 'dist', 'interceptor')) ||
+        existsSync(join(repo, 'dist', 'interceptor.exe'));
+      const cli = !!which('interceptor') || built;
       const prefsPath = join(CONFIG_ROOT, 'skills', 'Interceptor', 'preferences.env');
       const hasContext = existsSync(prefsPath) &&
         /^INTERCEPTOR_TEST_CONTEXT_ID=.+/m.test(readFileSync(prefsPath, 'utf8'));
       if (!cli || !hasContext) {
         const missing = [
-          !cli ? 'interceptor CLI/daemon (repo not cloned, binary not on PATH)' : null,
+          !cli
+            ? (cloned
+              ? `interceptor CLI not built (repo is cloned at ${repo} — run its scripts/build.sh, or scripts/install.ps1 on Windows)`
+              : 'interceptor CLI/daemon (repo not cloned, binary not on PATH)')
+            : null,
           !hasContext ? 'pinned test-profile context (INTERCEPTOR_TEST_CONTEXT_ID in preferences.env)' : null,
         ].filter(Boolean).join('; ');
         return { ok: false, detail: `skill + browser present, but runtime setup incomplete: ${missing}` };
@@ -561,7 +591,11 @@ function hookInterpreterProblems(): string[] {
   const seen = new Set<string>();
   for (const raw of commands) {
     // First token wins: `bun x.ts` → bun; `/path/x.hook.ts` → the script itself.
-    const first = raw.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, '') ?? '';
+    // Match the quotes BEFORE the whitespace: splitting first tears a quoted
+    // Windows path in half, so `"C:/Program Files/Git/bin/bash.exe" x.sh` was
+    // probed as `C:/Program` and reported `Program: file not found`.
+    const m = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(raw);
+    const first = m ? (m[1] ?? m[2] ?? m[3] ?? '') : '';
     if (!first || seen.has(first)) continue;
     seen.add(first);
     const resolved = expandPath(first);
@@ -576,10 +610,17 @@ function hookInterpreterProblems(): string[] {
     }
     // A path was given. If it's a script run bare, exec() needs mode + shebang.
     if (!existsSync(resolved)) { problems.push(`${basename(resolved)}: file not found`); continue; }
+    // Windows has no execute bit and CreateProcess ignores `#!` — every path
+    // hook, `bun.exe` included, came back `not executable (chmod +x)`. Existence
+    // is the whole test there; the POSIX pair below only means something on
+    // POSIX.
+    if (process.platform === 'win32') continue;
     let mode = 0;
     try { mode = statSync(resolved).mode; } catch {}
     const name = basename(resolved);
-    if (!(mode & 0o111)) { problems.push(`${name}: not executable (chmod +x)`); continue; }
+    // NTFS has no execute bit — mode&0o111 is meaningless there and flagged all
+    // 31 hooks "not executable" while every one fired live (windows-port W3/W4).
+    if (process.platform !== 'win32' && !(mode & 0o111)) { problems.push(`${name}: not executable (chmod +x)`); continue; }
     let head = '';
     try { head = readFileSync(resolved, 'utf8').slice(0, 200).split('\n')[0]; } catch {}
     if (!head.startsWith('#!')) { problems.push(`${name}: no #! shebang`); continue; }
@@ -588,7 +629,19 @@ function hookInterpreterProblems(): string[] {
     const interp = shebang[0].endsWith('/env') ? shebang[1] : shebang[0];
     if (!interp) continue;
     if (interp.includes('/')) {
-      if (!existsSync(interp)) problems.push(`${name}: shebang interpreter ${interp} missing`);
+      if (process.platform === 'win32') {
+        // Hooks on Windows run through Git Bash, whose msys layer maps POSIX
+        // interpreter paths (/bin/sh, /bin/bash) — existsSync against the NT
+        // filesystem is the wrong oracle (windows-port W3; .sh hooks verified
+        // firing live 2026-08-09). Probe the basename: PATH, then the bash.exe
+        // that ships beside git.exe in Git for Windows.
+        const base = interp.split('/').pop() ?? interp;
+        const gitExe = Bun.which('git');
+        const gitBash = gitExe ? join(gitExe, '..', '..', 'bin', `${base}.exe`) : '';
+        if (!which(base) && !(gitBash && existsSync(gitBash))) {
+          problems.push(`${name}: shebang needs '${base}' and no Git Bash found to supply it`);
+        }
+      } else if (!existsSync(interp)) problems.push(`${name}: shebang interpreter ${interp} missing`);
     } else if (!which(interp)) {
       problems.push(`${name}: shebang needs '${interp}', not on PATH`);
     }

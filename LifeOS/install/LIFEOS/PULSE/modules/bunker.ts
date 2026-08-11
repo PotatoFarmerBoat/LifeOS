@@ -15,7 +15,7 @@
 import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 
-const HOME = process.env.HOME ?? "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "";
 const MODULE = "bunker";
 // Bunker CODE folded under Pulse (data/code separation); DATA (shots) lives in
 // the USER config tree, so shot images are read from there, never from BUNKER_DIR.

@@ -4,7 +4,7 @@ import { paiRoot } from "./manifest-loader";
 import { atomicWriteJSON } from "./atomic-write";
 import type { PageData, PageMeta, Provenance } from "../Schema/PulseSchema";
 
-const HOME = process.env.HOME!;
+const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
 export const PULSE_DATA_DIR = resolve(HOME, ".claude", "LIFEOS", "MEMORY", "PULSE_DATA");
 
 export interface DataPlaneFile {

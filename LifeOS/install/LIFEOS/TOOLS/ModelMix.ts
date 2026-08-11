@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSy
 import { join, dirname } from 'path';
 import { EFFORT_MODEL, CURRENT, CROSS_VENDOR, type EffortLevel, type ClaudeTier } from './models.ts';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const PROJECTS_DIR = join(HOME, '.claude', 'projects');
 
 /**

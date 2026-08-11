@@ -12,7 +12,7 @@
 import { join } from "path"
 import { existsSync, readFileSync } from "fs"
 
-const HOME = process.env.HOME ?? ""
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? ""
 const TELOS_DIR = join(HOME, ".claude", "LIFEOS", "USER", "TELOS")
 
 function readFile(name: string): string {

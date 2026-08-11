@@ -1,17 +1,24 @@
 # UpdatePatterns Workflow
 
-Update Fabric patterns from the upstream repository to keep patterns current with latest improvements and additions.
+Update Fabric patterns from the upstream repository, **without destroying patterns that only exist locally.**
+
+---
+
+## Two rules this workflow must not break
+
+1. **Never delete a local-only pattern.** The skill ships patterns that do not exist upstream, including the `arbiter-*` family and `create_threat_model`. An earlier version of this workflow used `rsync --delete`, which removed them, and then Step 6 verified `create_threat_model` was present — a pattern Step 4 had just deleted. The sync is **additive and overwriting, never deleting**.
+2. **Do not depend on `rsync`.** It is absent from Git Bash on Windows, so an `rsync` step fails outright on that platform. Use POSIX `cp` in a loop, which works everywhere.
 
 ---
 
 ## Prerequisites
 
-**Fabric CLI must be installed.** The update pulls from the official fabric repository.
+Either the fabric CLI, or `git`. Neither is required if `~/.config/fabric/patterns` is already populated.
 
-To install fabric:
-```bash
-go install github.com/danielmiessler/fabric@latest
-```
+- fabric via winget: `winget install danielmiessler.Fabric`
+- fabric via Go: `go install github.com/danielmiessler/fabric@latest`
+
+The CLI's first-run setup insists on configuring at least one AI provider before it exits successfully. That does **not** matter here: it downloads the patterns before reaching the provider prompt, and this skill runs patterns natively through Claude rather than through fabric's model config.
 
 ---
 
@@ -26,102 +33,82 @@ curl -s -X POST http://localhost:31337/notify \
   > /dev/null 2>&1 &
 ```
 
-### Step 2: Check Current Pattern Count
+### Step 2: Record the starting state
 
 ```bash
-CURRENT_COUNT=$(ls -1 ~/.claude/skills/Fabric/Patterns/ 2>/dev/null | wc -l | tr -d ' ')
-echo "Current patterns: $CURRENT_COUNT"
+DEST=~/.claude/skills/Fabric/Patterns
+BEFORE=$(find "$DEST" -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' ')
+echo "Current patterns: $BEFORE"
 ```
 
-### Step 3: Update via Fabric CLI
-
-The fabric CLI handles pulling the latest patterns from the upstream repository:
+### Step 3: Refresh the upstream copy
 
 ```bash
-fabric -U
-```
+SRC=~/.config/fabric/patterns
 
-This updates patterns in `~/.config/fabric/patterns/`.
-
-### Step 4: Sync to Skill Directory
-
-Copy updated patterns to the Fabric skill's local storage:
-
-```bash
-rsync -av --delete ~/.config/fabric/patterns/ ~/.claude/skills/Fabric/Patterns/
-```
-
-### Step 5: Report Results
-
-```bash
-NEW_COUNT=$(ls -1 ~/.claude/skills/Fabric/Patterns/ 2>/dev/null | wc -l | tr -d ' ')
-echo ""
-echo "Pattern update complete!"
-echo "Previous count: $CURRENT_COUNT"
-echo "New count: $NEW_COUNT"
-if [ "$NEW_COUNT" -gt "$CURRENT_COUNT" ]; then
-  ADDED=$((NEW_COUNT - CURRENT_COUNT))
-  echo "Added: $ADDED new patterns"
+if command -v fabric >/dev/null 2>&1; then
+  fabric -U            # refreshes ~/.config/fabric/patterns
+elif [ ! -d "$SRC" ]; then
+  # No CLI: clone straight to a temp dir and point SRC at it.
+  TMP=$(mktemp -d)
+  git clone --depth 1 https://github.com/danielmiessler/fabric.git "$TMP/fabric"
+  SRC="$TMP/fabric/data/patterns"
 fi
+
+[ -d "$SRC" ] || { echo "No pattern source found at $SRC — aborting."; exit 1; }
 ```
 
-### Step 6: Verify Key Patterns Exist
+Note the upstream path is `data/patterns`, not `patterns`.
 
-Confirm critical patterns are present:
+### Step 4: Back up before touching anything
 
 ```bash
-for pattern in extract_wisdom summarize create_threat_model analyze_claims; do
-  if [ -d ~/.claude/skills/Fabric/Patterns/$pattern ]; then
-    echo "✓ $pattern"
+cp -r "$DEST" "$DEST.bak-$(date +%Y-%m-%d)"
+echo "Backup: $DEST.bak-$(date +%Y-%m-%d)"
+```
+
+### Step 5: Additive sync
+
+New patterns are added, existing ones are refreshed from upstream, local-only ones are left alone.
+
+```bash
+ADDED=0; UPDATED=0
+for dir in "$SRC"/*/; do
+  name=$(basename "$dir")
+  if [ -d "$DEST/$name" ]; then
+    cp -r "$dir." "$DEST/$name/" && UPDATED=$((UPDATED+1))
   else
-    echo "✗ $pattern MISSING"
+    cp -r "$dir" "$DEST/$name" && ADDED=$((ADDED+1))
   fi
 done
+echo "Added: $ADDED   Refreshed: $UPDATED"
 ```
 
----
-
-## Alternative: Manual Git Update
-
-If fabric CLI is not available, you can update from the fabric repository directly:
+### Step 6: Report and verify
 
 ```bash
-# Clone or update fabric repo
-cd /tmp
-if [ -d fabric ]; then
-  cd fabric && git pull
-else
-  git clone https://github.com/danielmiessler/fabric.git
-  cd fabric
-fi
+AFTER=$(find "$DEST" -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' ')
+echo "Patterns: $BEFORE -> $AFTER"
 
-# Sync patterns
-rsync -av --delete patterns/ ~/.claude/skills/Fabric/Patterns/
+# These include local-only patterns. A miss here means the sync deleted
+# something it should not have — restore from the Step 4 backup.
+for pattern in extract_wisdom summarize analyze_claims create_threat_model arbiter-run-prompt; do
+  [ -d "$DEST/$pattern" ] && echo "OK $pattern" || echo "MISSING $pattern"
+done
 
-# Cleanup
-cd /tmp && rm -rf fabric
+# Every pattern must carry a system.md or it will not execute.
+find "$DEST" -maxdepth 1 -mindepth 1 -type d ! -exec test -f {}/system.md \; -print
 ```
 
----
-
-## Verification
-
-After update, verify with:
-
-```bash
-# Count patterns
-ls -1 ~/.claude/skills/Fabric/Patterns/ | wc -l
-
-# List recent additions (if patterns have dates)
-ls -lt ~/.claude/skills/Fabric/Patterns/ | head -10
-```
+The last command prints nothing when healthy. Any path it prints is a pattern directory with no `system.md`.
 
 ---
 
 ## Output
 
 Report to user:
-- Previous pattern count
-- New pattern count
-- Number of patterns added (if any)
-- Confirmation that sync completed successfully
+
+- Pattern count before and after
+- How many were added versus refreshed
+- Any `MISSING` line from Step 6, which means restore the backup
+- Any directory listed as lacking `system.md`

@@ -19,7 +19,7 @@ import { readFileSync, statSync, existsSync, readdirSync } from 'fs';
 import { join, resolve, dirname, relative } from 'path';
 import { execSync } from 'child_process';
 
-const HOME = process.env.HOME || '';
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || '';
 const CLAUDE_DIR = join(HOME, '.claude');
 const LIFEOS_DIR = join(CLAUDE_DIR, 'LIFEOS');
 const HOOKS_DIR = join(CLAUDE_DIR, 'hooks');

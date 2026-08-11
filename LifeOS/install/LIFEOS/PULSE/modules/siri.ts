@@ -21,7 +21,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk"
 import { buildLifeosContextBlock } from "../lib/lifeos-context"
 import { loadRemoteMcpServers, mcpStatusPromptLine } from "../lib/mcp-allowlist"
 
-const CWD = `${process.env.HOME}/.claude`
+const CWD = `${(process.env.HOME ?? process.env.USERPROFILE)}/.claude`
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000 // 60 min idle gap resets the SDK thread
 const SDK_TIMEOUT_MS = 50_000 // Shortcuts' Get Contents of URL times out ~60s; stay under it
 const MAX_TURNS = 10 // speed over depth — this is a spoken exchange, not a work session

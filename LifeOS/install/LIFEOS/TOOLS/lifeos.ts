@@ -158,6 +158,23 @@ function displayBanner() {
 
 // The launcher wraps the Claude Code CLI. On machines without it (e.g. an
 // OpenCode-driven install, #1448) fail with directions, not a bare ENOENT.
+/**
+ * Spawn-safe argv seed for the claude CLI (windows-port W9). npm installs of
+ * Claude Code on Windows ship only .cmd/.ps1 shims — no claude.exe — and
+ * uv_spawn cannot exec a batch file directly (ENOENT on CI, lifeos.ts:520).
+ * Resolve via Bun.which and route batch shims through cmd.exe.
+ */
+function claudeArgv(): string[] {
+  const resolved = Bun.which("claude") ?? "claude";
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
+    return ["cmd", "/c", resolved];
+  }
+  if (process.platform === "win32" && /\.ps1$/i.test(resolved)) {
+    return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", resolved];
+  }
+  return [resolved];
+}
+
 function requireClaudeCli() {
   if (Bun.which("claude")) return;
   console.error("❌ Claude Code CLI not found on PATH — `lifeos` wraps the `claude` binary.");
@@ -169,7 +186,7 @@ function requireClaudeCli() {
 
 function getCurrentVersion(): string | null {
   if (!Bun.which("claude")) return null;
-  const result = spawnSync(["claude", "--version"]);
+  const result = spawnSync([...claudeArgv(), "--version"]);
   const output = result.stdout.toString();
   const match = output.match(/([0-9]+\.[0-9]+\.[0-9]+)/);
   return match ? match[1] : null;
@@ -452,7 +469,7 @@ async function cmdLaunch(options: { mcp?: string; resume?: boolean; resumeId?: s
 
   requireClaudeCli();
   displayBanner();
-  const args = ["claude"];
+  const args = claudeArgv();
 
   // LifeOS System Prompt — constitutional rules appended to Claude Code's system prompt
   // These rules get highest instruction authority (system prompt layer > CLAUDE.md layer)
@@ -653,7 +670,7 @@ async function cmdPrompt(prompt: string) {
   // BILLING: subscription, not API. Removed --bare (forces ANTHROPIC_API_KEY),
   // strip the key from inherited env.
   requireClaudeCli();
-  const args = ["claude", "-p", prompt];
+  const args = [...claudeArgv(), "-p", prompt];
 
   // Same constitutional layer as interactive launches — without this, one-shots
   // ran bare Claude Code (CLAUDE.md only, no output format, no security protocol).

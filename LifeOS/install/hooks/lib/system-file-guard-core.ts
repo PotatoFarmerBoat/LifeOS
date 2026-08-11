@@ -16,7 +16,7 @@ import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { isContained, isPatternAllowlisted, relativeToClaudeRoot } from "./containment-zones";
 
-const HOME = process.env.HOME ?? homedir();
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? homedir();
 const CLAUDE_ROOT = join(HOME, ".claude");
 const DEFAULT_DENY_LIST_PATH = join(CLAUDE_ROOT, "LIFEOS/USER/SECURITY/DENY_LIST.txt");
 // USER/SECURITY, not skills/_LIFEOS: on a public install, running the shipped

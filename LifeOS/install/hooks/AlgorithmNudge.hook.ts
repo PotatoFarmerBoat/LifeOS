@@ -68,7 +68,7 @@ import { join } from 'path';
 import { resolveBun } from './lib/resolve-bin';
 import { deriveAscent, type AscentState } from '../LIFEOS/TOOLS/ascent';
 
-const PAI = join(process.env.HOME || '', '.claude');
+const PAI = join((process.env.HOME ?? process.env.USERPROFILE) || '', '.claude');
 // Overridable so tests can PRODUCE a state-machine edge instead of hand-writing
 // its precondition, and so test runs stop appending to the production diagnostic
 // log (Forge delta audit H-B, M-E — the log was 7 lines, all of them test noise).
@@ -427,7 +427,7 @@ function loadIndex(): SkillIndex | null {
       // self-heal must leave a trace something can see.
       try {
         appendFileSync(
-          join(process.env.HOME ?? '', '.claude/LIFEOS/MEMORY/OBSERVABILITY/hook-selfheal.jsonl'),
+          join((process.env.HOME ?? process.env.USERPROFILE) ?? '', '.claude/LIFEOS/MEMORY/OBSERVABILITY/hook-selfheal.jsonl'),
           JSON.stringify({ ts: new Date().toISOString(), hook: 'AlgorithmNudge', action: 'rebuild-index', bun, error: String(e) }) + '\n',
         );
       } catch { /* observability write itself is best-effort */ }

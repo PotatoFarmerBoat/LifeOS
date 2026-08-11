@@ -20,7 +20,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { randomUUID } from "node:crypto"
 
-const HOME = process.env.HOME ?? homedir()
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? homedir()
 const MODULE_NAME = "local-intelligence"
 
 // Primary path: user-scoped customizations directory (per {{PRINCIPAL_NAME}} directive 2026-05-03).

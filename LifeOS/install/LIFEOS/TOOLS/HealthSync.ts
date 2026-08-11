@@ -39,7 +39,7 @@ type SourcePull = (ctx: Ctx) => Promise<SourceResult>;
 type SourceModule = { pull: SourcePull };
 type CliCommand = "pull" | "status" | "current" | "auth";
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const PREFIX = "[HealthSync]";
 const SOURCE_NAMES: readonly SourceName[] = ["oura", "eightsleep", "apple", "function"];
 const CURRENT_PATH = join(HOME, ".claude", "LIFEOS", "USER", "HEALTH", "current.json");

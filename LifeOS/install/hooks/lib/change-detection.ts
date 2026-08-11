@@ -207,6 +207,9 @@ function createFileChange(tool: 'Write' | 'Edit', path: string): FileChange {
  * Categorize a file path by its location in the LifeOS system.
  */
 export function categorizeChange(path: string): ChangeCategory | null {
+  // win32 transcripts carry backslashed paths — normalize so the '/'-built
+  // patterns below apply (windows-port W8, #1119 class).
+  path = path.replaceAll('\\', '/');
   // Check exclusions first
   for (const excluded of EXCLUDED_PATHS) {
     if (path.includes(excluded)) {
@@ -222,8 +225,11 @@ export function categorizeChange(path: string): ChangeCategory | null {
   // documentation pipelines never fired for hook or skill work, which is most
   // system work. Measured on a live transcript: 9 file changes, 6 of them
   // hooks, all categorized null and reported "not significant".
-  const absolutePath = path.startsWith('/') ? path : join(CLAUDE_DIR, path);
-  if (!absolutePath.startsWith(CLAUDE_DIR) && !absolutePath.startsWith(LIFEOS_DIR)) {
+  // Drive-letter absolutes ('C:/...') are absolute too; join() re-emits '\' on
+  // win32, so normalize the result and both roots before comparing.
+  const isAbsolute = path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+  const absolutePath = (isAbsolute ? path : join(CLAUDE_DIR, path)).replaceAll('\\', '/');
+  if (!absolutePath.startsWith(CLAUDE_DIR.replaceAll('\\', '/')) && !absolutePath.startsWith(LIFEOS_DIR.replaceAll('\\', '/'))) {
     return null;
   }
 

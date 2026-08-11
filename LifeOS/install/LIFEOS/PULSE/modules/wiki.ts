@@ -34,7 +34,7 @@ import MiniSearch from "minisearch"
 
 // Path Construction
 
-const HOME = process.env.HOME ?? "~"
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "~"
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 const DOCUMENTATION_DIR = join(LIFEOS_DIR, "DOCUMENTATION")
 const KNOWLEDGE_DIR = join(LIFEOS_DIR, "MEMORY", "KNOWLEDGE")

@@ -233,7 +233,7 @@ function handlePostToolUse(raw: string): void {
       } catch { /* no state file yet — run it */ }
       if (due) {
         const proc = spawn('bun', [paiPath('TOOLS', 'WorkReconcile.ts')], {
-          detached: true,
+          detached: true, windowsHide: true,
           stdio: 'ignore',
         });
         proc.unref();

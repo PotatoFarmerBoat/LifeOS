@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "
 import { join } from "path";
 import { spawnSync } from "child_process";
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const TEMPLATE = join(HOME, ".claude", "LIFEOS", "TOOLS", "com.lifeos.commitmentsweep.plist.template");
 const TARGET_DIR = join(HOME, "Library", "LaunchAgents");
 const TARGET = join(TARGET_DIR, "com.lifeos.commitmentsweep.plist");

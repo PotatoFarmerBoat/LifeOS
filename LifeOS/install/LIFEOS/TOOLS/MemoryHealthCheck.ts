@@ -31,7 +31,7 @@ if (!import.meta.main) {
   throw new Error("MemoryHealthCheck.ts is a CLI script with top-level side effects — spawn it via bun, never import it.");
 }
 
-const HOME = process.env.HOME || "";
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
 const CLAUDE = join(HOME, ".claude");
 const HOOKS_DIR = join(CLAUDE, "hooks");
 const TOOLS_DIR = join(CLAUDE, "LIFEOS/TOOLS");

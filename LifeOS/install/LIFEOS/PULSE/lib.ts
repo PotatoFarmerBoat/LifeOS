@@ -66,7 +66,7 @@ export interface DaemonConfig {
 // structural privacy lever — no separate scrub policy needed.
 
 export const USER_CRON_PATH = join(
-  process.env.HOME ?? "~",
+  (process.env.HOME ?? process.env.USERPROFILE) ?? "~",
   ".claude", "LIFEOS", "USER", "CONFIG", "PULSE.user.toml",
 )
 
@@ -524,7 +524,7 @@ export async function spawnScript(command: string, timeoutMs = 60_000): Promise<
   const proc = Bun.spawn([BASH_PATH, "-c", command], {
     stdout: "pipe",
     stderr: "pipe",
-    cwd: join(process.env.HOME ?? "~", ".claude", "LIFEOS", "PULSE"),
+    cwd: join((process.env.HOME ?? process.env.USERPROFILE) ?? "~", ".claude", "LIFEOS", "PULSE"),
     env: { ...process.env },
   })
 
@@ -556,9 +556,9 @@ export async function spawnClaude(prompt: string, opts: { model: string; timeout
     "--setting-sources", "",
     "--system-prompt", "",
   ]
-  const claudePath = Bun.which("claude") ?? join(process.env.HOME ?? "~", ".local", "bin", "claude")
+  const claudePath = Bun.which("claude") ?? join((process.env.HOME ?? process.env.USERPROFILE) ?? "~", ".local", "bin", "claude")
 
-  const env: Record<string, string> = { ...process.env, HOME: process.env.HOME ?? "" } as Record<string, string>
+  const env: Record<string, string> = { ...process.env, HOME: (process.env.HOME ?? process.env.USERPROFILE) ?? "" } as Record<string, string>
   // Strip BOTH keys — Anthropic's precedence chain ranks ANTHROPIC_API_KEY and
   // ANTHROPIC_AUTH_TOKEN above CLAUDE_CODE_OAUTH_TOKEN, so either one in env
   // silently overrides OAuth. Mirrors LIFEOS/TOOLS/Inference.ts:116-117.

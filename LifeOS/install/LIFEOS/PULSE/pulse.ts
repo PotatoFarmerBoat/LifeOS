@@ -20,7 +20,7 @@ import { isLoopbackHostHeader } from "./lib/host-guard.ts"
 
 // ── Load .env before anything else ──
 
-const HOME = process.env.HOME ?? "~"
+const HOME = (process.env.HOME ?? process.env.USERPROFILE) ?? "~"
 const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
 
@@ -987,7 +987,7 @@ async function main() {
     // expands to HOME at runtime — the existence check must match or every
     // "~/" job gets falsely disabled as "not present on this install".
     const resolveRef = (p: string): string => {
-      if (p.startsWith("~/")) return join(process.env.HOME ?? "", p.slice(2))
+      if (p.startsWith("~/")) return join((process.env.HOME ?? process.env.USERPROFILE) ?? "", p.slice(2))
       return p.startsWith("/") ? p : join(PULSE_DIR, p)
     }
     const missing = scriptRefs.filter((p) => !existsSync(resolveRef(p)))
