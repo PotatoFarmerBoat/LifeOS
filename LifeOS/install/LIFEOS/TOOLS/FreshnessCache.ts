@@ -3,14 +3,15 @@
 // in LIFEOS_DIR/LIFEOS_CONFIG_DIR/PROJECTS_DIR resolves to a shadow dir (#1404 / PR #1451, author jbmml).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
 }
 
 /**
- * FreshnessCache — render-path cache for the statusline FRESH section.
+ * FreshnessCache — render-path cache for constitutional-file freshness.
  *
- * The statusline reads `~/.claude/LIFEOS/USER/CACHE/freshness.json` directly
- * (no network call) on every refresh. This file is rewritten by:
+ * Live consumers: the 🧠 memory-delta hook surface, Pulse
+ * `/api/freshness/summary`, and `InterviewDue.ts` (whose verdict cache
+ * feeds the 🎤 interview-due statusline chip). Rewritten by:
  *   1. Every bump-function in TelosFreshness.ts (mutation-driven)
  *   2. Pulse `invalidate()` in modules/telos.ts (in-memory cache flip)
  *   3. SessionStart hook (catches age-progression grade changes)
@@ -22,15 +23,16 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
 import { writeFileSync, renameSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { readContextFreshness } from "./TelosFreshness";
+import { homedir } from "node:os";
 
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const v = process.env[k];
-  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
+  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
 }
 
 
-const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 const LIFEOS_DIR = process.env.LIFEOS_DIR || join(HOME, ".claude", "LIFEOS");
 const CACHE_DIR = join(LIFEOS_DIR, "USER", "CACHE");
 const CACHE_PATH = join(CACHE_DIR, "freshness.json");

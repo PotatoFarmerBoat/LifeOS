@@ -7,9 +7,9 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from "node:os";
 
-const HOME = (process.env.HOME ?? process.env.USERPROFILE)!;
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 const PULSE_TOML_PATH = join(HOME, '.claude/LIFEOS/PULSE/PULSE.toml');
 
 // ============================================================================

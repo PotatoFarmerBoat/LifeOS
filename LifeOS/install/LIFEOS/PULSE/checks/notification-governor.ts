@@ -3,7 +3,7 @@
 // in LIFEOS_DIR/LIFEOS_CONFIG_DIR/PROJECTS_DIR resolves to a shadow dir (#1404 / PR #1451, author jbmml).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
 }
 
 
@@ -38,20 +38,22 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { join, dirname } from "path";
 import { createHash } from "crypto";
 import { PULSE_BASE } from "../endpoint";
+import { homedir } from "node:os";
 
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const v = process.env[k];
-  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
+  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
 }
 
 
-const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 const LIFEOS_DIR = process.env.LIFEOS_DIR || join(HOME, ".claude", "LIFEOS");
 const STATE_FILE = join(LIFEOS_DIR, "PULSE", "state", "notification-governor.json");
 const LOG_FILE = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY", "notification-governor.jsonl");
 const NOTIFY_URL = `${PULSE_BASE}/notify`;
-const VOICE_ID = "fTtv3eikoepIosk8dTZ5";
+// No hardcoded voice_id: /notify speaks in the configured default voice.
+// (The dedicated Algorithm phase-transition voice was retired 2026-08-05.)
 
 type Priority = "critical" | "event" | "light";
 type Channel = "voice" | "ntfy" | "email";
@@ -146,7 +148,7 @@ async function dispatch(channel: Channel, message: string): Promise<boolean> {
       const res = await fetch(NOTIFY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, voice_id: VOICE_ID, voice_enabled: true }),
+        body: JSON.stringify({ message, voice_enabled: true }),
       });
       return res.ok;
     } catch {
