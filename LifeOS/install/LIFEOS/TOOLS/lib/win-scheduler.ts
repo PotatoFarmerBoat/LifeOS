@@ -163,11 +163,25 @@ export function writeWrapper(spec: PlistSpec, bunDir: string): string {
 
   if (spec.keepAlive) {
     // Already running? Then this repetition tick has nothing to do.
+    //
+    // This guard used to read the PID file inside an `if exist (...)` block and
+    // test %_pid% in the same block. cmd.exe expands the whole block at parse
+    // time, so %_pid% was always empty and the guard never fired: every
+    // 5-minute tick launched another copy, and dozens of orphaned daemons piled
+    // up (all of them then fighting over the same redirected log file).
+    // Matching on the live command line instead of a PID file also survives a
+    // reboot handing the recorded PID to some unrelated process.
+    const scriptArg = spec.argv.slice(1).find(a => /\.(ts|js|sh)$/.test(a)) ?? spec.argv[spec.argv.length - 1];
+    const token = (scriptArg.split(/[\\/]/).pop() ?? scriptArg).split("'").join("''");
+    const exe = (win(spec.argv[0]).split("\\").pop() ?? "bun.exe").split("'").join("''");
+    // Exit 9 means "already running"; anything else (including a PowerShell
+    // failure) falls through to the launch, so the daemon can never be kept
+    // down by a broken probe.
     lines.push(
-      `if exist "${pidFile}" (`,
-      `  set /p _pid=<"${pidFile}"`,
-      `  tasklist /FI "PID eq %_pid%" 2>nul | find "%_pid%" >nul && exit /b 0`,
-      `)`,
+      `powershell -NoProfile -Command "$n = @(Get-CimInstance Win32_Process | ` +
+      `Where-Object { $_.Name -eq '${exe}' -and $_.CommandLine -like '*${token}*' }).Count; ` +
+      `if ($n -gt 0) { exit 9 } else { exit 0 }"`,
+      `if errorlevel 9 if not errorlevel 10 exit /b 0`,
     );
   }
 
