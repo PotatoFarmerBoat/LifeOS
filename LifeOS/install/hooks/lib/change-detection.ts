@@ -179,8 +179,23 @@ export function parseToolUseBlocks(transcriptPath: string): FileChange[] {
 /**
  * Normalize an absolute path to relative (to LIFEOS_DIR).
  */
+/**
+ * Path-boundary prefix test: `p` is `root` itself or a descendant. A bare
+ * startsWith is a STRING test, not a path test — `~/.claude-backup` and
+ * `~/.claude/LIFEOS-backup` both passed it and got treated as live system
+ * changes (public issue #1797, @Steffen025).
+ */
+function isUnderDir(p: string, root: string): boolean {
+  // Roots come from join(), which emits '\' on win32, while callers normalize
+  // their paths to '/'. Compare on one separator or every test fails on Windows
+  // (windows-port W8, #1119 class).
+  const a = p.replaceAll('\\', '/');
+  const b = root.replaceAll('\\', '/');
+  return a === b || a.startsWith(b + '/');
+}
+
 function normalizeToRelativePath(absolutePath: string): string {
-  if (absolutePath.startsWith(LIFEOS_DIR)) {
+  if (isUnderDir(absolutePath, LIFEOS_DIR)) {
     return relative(LIFEOS_DIR, absolutePath);
   }
   return absolutePath;
@@ -225,11 +240,14 @@ export function categorizeChange(path: string): ChangeCategory | null {
   // documentation pipelines never fired for hook or skill work, which is most
   // system work. Measured on a live transcript: 9 file changes, 6 of them
   // hooks, all categorized null and reported "not significant".
-  // Drive-letter absolutes ('C:/...') are absolute too; join() re-emits '\' on
-  // win32, so normalize the result and both roots before comparing.
-  const isAbsolute = path.startsWith('/') || /^[A-Za-z]:\//.test(path);
+  // Drive-letter absolutes ('C:\...' / 'C:/...') are absolute too — transcripts
+  // record raw win32 tool_input paths, so a missed test here would join() a
+  // full drive path onto CLAUDE_DIR. Normalize to '/' before comparing;
+  // isUnderDir normalizes the join()-built roots on its side.
+  const isAbsolute = path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
   const absolutePath = (isAbsolute ? path : join(CLAUDE_DIR, path)).replaceAll('\\', '/');
-  if (!absolutePath.startsWith(CLAUDE_DIR.replaceAll('\\', '/')) && !absolutePath.startsWith(LIFEOS_DIR.replaceAll('\\', '/'))) {
+  // Path-boundary test, not string prefix (public issue #1797, @Steffen025).
+  if (!isUnderDir(absolutePath, CLAUDE_DIR) && !isUnderDir(absolutePath, LIFEOS_DIR)) {
     return null;
   }
 

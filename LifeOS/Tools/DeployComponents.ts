@@ -37,6 +37,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } 
 import { atomicWriteText } from "./lib/atomic-write";
 import { quoteCmdPath, resolveBash } from "./lib/windows-interp";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { copyMissing, detectDevTree } from "./InstallEngine";
 
 // Enhancement components are the à-la-carte half of setup. The "LifeOS Core"
@@ -197,7 +198,9 @@ function deployStatusline(ctx: Ctx): ComponentResult {
     const alreadyWired = current?.command === command;
     if (!alreadyWired) {
       backup(settingsPath);
-      settings.statusLine = { type: "command", command, refreshInterval: 1 };
+      // ported from public PR #1772, @asdf8675309; value adapted to 5 — a 1s
+      // refresh re-runs the statusline script every second for no visible gain.
+      settings.statusLine = { type: "command", command, refreshInterval: 5 };
       // Atomic — never leave a half-written settings.json (public PR #1643, @elhoim)
       atomicWriteText(settingsPath, JSON.stringify(settings, null, 2) + "\n");
     }
@@ -402,7 +405,9 @@ function deploy(component: Component, ctx: Ctx): ComponentResult {
 
 function main(): void {
   const a = process.argv.slice(2);
-  const home = (process.env.HOME ?? process.env.USERPROFILE) || "";
+  // USERPROFILE before homedir(): Windows does not set HOME.
+  // (public issue #1729, @umair-a11y — homedir() is the final backstop.)
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? homedir();
   const configRoot = arg(a, "--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
   const skillRoot = arg(a, "--skill-root") || join(import.meta.dir, "..");
   const apply = a.includes("--apply");

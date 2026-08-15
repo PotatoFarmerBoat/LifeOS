@@ -1,7 +1,7 @@
 // Normalize env path vars Claude Code may inject unexpanded (LifeOS#1404).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, (process.env.HOME ?? process.env.USERPROFILE) ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
 }
 
 /**
@@ -17,8 +17,9 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
 
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
+import { homedir } from "node:os";
 
-const HOME = (process.env.HOME ?? process.env.USERPROFILE) || "";
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 const LIFEOS_DIR = process.env.LIFEOS_DIR || join(HOME, ".claude", "LIFEOS");
 const RESULTS_DIR = join(LIFEOS_DIR, "MEMORY", "STATE", "Evals-Results");
 
