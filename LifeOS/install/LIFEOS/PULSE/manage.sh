@@ -28,15 +28,58 @@ else
   BUN_PATH="$(command -v bun || echo "$HOME/.bun/bin/bun")"
 fi
 
-# OS detection — Linux uses systemd --user, macOS uses launchctl.
+# OS detection — Linux uses systemd --user, macOS uses launchctl, Windows uses
+# Task Scheduler. Without the Windows case, git-bash (uname reports
+# MINGW64_NT-10.0-*) fell through to the macOS branch and ran `launchctl`, which
+# does not exist there. stderr was already redirected to /dev/null, so every
+# start/stop printed its success line while doing absolutely nothing, and
+# `status` read PULSE/state/pulse.pid — a file the Windows path never writes —
+# and reported NOT RUNNING even when Pulse was up.
 OS=$(uname -s)
 SERVICE_SRC="$PULSE_DIR/$PLIST_NAME.service"
 SYSTEMD_SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_DST="$SYSTEMD_SERVICE_DIR/$PLIST_NAME.service"
 
+case "$OS" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+  *)                    IS_WINDOWS=0 ;;
+esac
+
+# The Windows service layer is owned by LIFEOS/TOOLS/lib/win-scheduler.ts: it
+# generates a .cmd wrapper per label and registers it as a scheduled task under
+# the \LifeOS\ folder. The wrapper records its daemon's PID here.
+WIN_SERVICES="$HOME/.claude/LIFEOS/MEMORY/STATE/win-services"
+WIN_PID_FILE="$WIN_SERVICES/$PLIST_NAME.pid"
+
+# Everything Windows-side goes through PowerShell rather than cmd or schtasks.
+# Under git-bash a leading `/` in an argument is path-mangled into `C:/...`, so
+# `schtasks /Run /TN ...` needs `//Run //TN` to survive — a trap worth avoiding
+# entirely rather than encoding.
+psrun() { powershell -NoProfile -NonInteractive -Command "$1"; }
+
+# Count live Pulse daemons by command line. A recorded PID is not trustworthy on
+# its own: a reboot can hand that number to an unrelated process.
+win_pulse_count() {
+  psrun "@(Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'bun.exe' -and \$_.CommandLine -like '*pulse.ts*' }).Count" 2>/dev/null | tr -d '\r\n '
+}
+
 case "$1" in
   start)
-    if [ "$OS" = "Linux" ]; then
+    if [ "$IS_WINDOWS" = "1" ]; then
+      # Start via the registered task so the daemon is launched exactly the way
+      # Task Scheduler will launch it, wrapper guard included.
+      psrun "Start-ScheduledTask -TaskPath '\\LifeOS\\' -TaskName '$PLIST_NAME'" >/dev/null 2>&1
+      for _ in $(seq 1 20); do
+        sleep 0.5
+        if [ "$(win_pulse_count)" != "0" ]; then
+          echo "LifeOS Pulse started (PID $(cat "$WIN_PID_FILE" 2>/dev/null | tr -d '\r\n'))"
+          exit 0
+        fi
+      done
+      echo "ERROR: LifeOS Pulse did not come up within 10s." >&2
+      echo "  Check: tail -50 $WIN_SERVICES/$PLIST_NAME.log" >&2
+      exit 1
+    elif [ "$OS" = "Linux" ]; then
       systemctl --user start "$PLIST_NAME"
       echo "LifeOS Pulse started"
     else
@@ -51,6 +94,15 @@ case "$1" in
     ;;
 
   stop)
+    if [ "$IS_WINDOWS" = "1" ]; then
+      # Match on the command line, not the recorded PID: the wrapper's PID file
+      # goes stale across reboots, and killing a recycled PID would take out an
+      # unrelated process.
+      psrun "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'bun.exe' -and \$_.CommandLine -like '*pulse.ts*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" >/dev/null 2>&1
+      rm -f "$WIN_PID_FILE"
+      echo "LifeOS Pulse stopped"
+      exit 0
+    fi
     if [ "$OS" = "Linux" ]; then
       systemctl --user stop "$PLIST_NAME" 2>/dev/null
     else
@@ -75,7 +127,25 @@ case "$1" in
     ;;
 
   status)
-    if [ "$OS" = "Linux" ]; then
+    if [ "$IS_WINDOWS" = "1" ]; then
+      WIN_COUNT="$(win_pulse_count)"
+      WIN_PID="$(cat "$WIN_PID_FILE" 2>/dev/null | tr -d '\r\n')"
+      if [ "$WIN_COUNT" = "0" ] || [ -z "$WIN_COUNT" ]; then
+        if [ -n "$WIN_PID" ]; then
+          echo "LifeOS Pulse: DEAD (stale PID $WIN_PID)"
+        else
+          echo "LifeOS Pulse: NOT RUNNING (no daemon, no PID file)"
+        fi
+      else
+        # More than one is the EADDRINUSE pile-up the keepAlive wrapper guard
+        # exists to prevent; say so rather than reporting a healthy single.
+        if [ "$WIN_COUNT" = "1" ]; then
+          echo "LifeOS Pulse: RUNNING (PID ${WIN_PID:-unknown})"
+        else
+          echo "LifeOS Pulse: DEGRADED ($WIN_COUNT daemons alive — duplicates fight over :31337)"
+        fi
+      fi
+    elif [ "$OS" = "Linux" ]; then
       systemctl --user status "$PLIST_NAME"
     else
       if [ -f "$PID_FILE" ]; then
@@ -107,6 +177,15 @@ case "$1" in
 
   install)
     mkdir -p "$PULSE_DIR/state" "$PULSE_DIR/logs"
+
+    # Windows registration is owned by the task installer, not by this script.
+    # Refuse loudly rather than falling through to launchctl and reporting a
+    # success that registered nothing.
+    if [ "$IS_WINDOWS" = "1" ]; then
+      echo "ERROR: on Windows, Pulse is installed as a scheduled task, not from this script." >&2
+      echo "  Run: bun ~/.claude/LIFEOS/TOOLS/Services.ts install --only pulse --yes" >&2
+      exit 1
+    fi
 
     if [ "$OS" = "Linux" ]; then
       mkdir -p "$SYSTEMD_SERVICE_DIR"
@@ -158,6 +237,11 @@ case "$1" in
     ;;
 
   uninstall)
+    if [ "$IS_WINDOWS" = "1" ]; then
+      echo "ERROR: on Windows, remove the scheduled task instead of using this script." >&2
+      echo "  Run: bun ~/.claude/LIFEOS/TOOLS/Services.ts uninstall --only pulse" >&2
+      exit 1
+    fi
     if [ "$OS" = "Linux" ]; then
       systemctl --user disable --now "$PLIST_NAME" 2>/dev/null
       rm -f "$SERVICE_DST"
