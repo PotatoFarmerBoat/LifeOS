@@ -246,14 +246,113 @@ export function registeredLabels(): Set<string> {
   return out;
 }
 
+/**
+ * Patch the three settings `schtasks /Create` cannot express, which between them
+ * decide whether a task on a laptop ever actually runs:
+ *
+ *   StartWhenAvailable        a trigger that lands while the machine is asleep or
+ *                             off is otherwise dropped PERMANENTLY, not deferred.
+ *                             Every daily-cadence LifeOS task on a machine that
+ *                             sleeps overnight is lost this way, and Task Scheduler
+ *                             still reports the task as `Ready`.
+ *   DisallowStartIfOnBatteries  defaults TRUE, so nothing starts while unplugged.
+ *   StopIfGoingOnBatteries      defaults TRUE, so a running daemon is killed the
+ *                             moment the machine is unplugged.
+ *
+ * Observed on Windows 11 2026-08-16: seven of eleven registered tasks had never
+ * executed once (LastTaskResult 267011 = SCHED_S_TASK_HAS_NOT_RUN) with all three
+ * at their broken defaults.
+ *
+ * This mutates ONLY those three properties on the already-created task, so the
+ * trigger, the S4U principal and the Limited run level survive untouched — the
+ * fix must not quietly escalate privilege to buy reliability.
+ */
+function hardenTaskSettings(label: string): { code: number; out: string } {
+  const q = (s: string) => s.split("'").join("''");
+  const ps = [
+    "$ErrorActionPreference='Stop';",
+    `$t = Get-ScheduledTask -TaskPath '\\${q(TASK_FOLDER)}\\' -TaskName '${q(label)}';`,
+    "$t.Settings.StartWhenAvailable = $true;",
+    "$t.Settings.DisallowStartIfOnBatteries = $false;",
+    "$t.Settings.StopIfGoingOnBatteries = $false;",
+    // The principal is deliberately left alone. `schtasks /Create` registers an
+    // Interactive principal, which runs only while the principal is logged on; S4U
+    // would additionally run logged-off. Setting it was tried and rejected with
+    // 0x80070005 (E_ACCESSDENIED) on a managed Windows 11 machine 2026-08-16 —
+    // changing LogonType needs elevation, and buying reliability with elevation is
+    // not a trade this installer is allowed to make. StartWhenAvailable already
+    // covers the real-world case: a run missed while asleep or logged off fires at
+    // the next logon instead of being dropped forever.
+    "Set-ScheduledTask -InputObject $t | Out-Null",
+  ].join(" ");
+  const p = Bun.spawnSync(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], { stdout: "pipe", stderr: "pipe" });
+  return { code: p.exitCode ?? 1, out: (p.stdout.toString() + p.stderr.toString()).trim() };
+}
+
+/** Task Scheduler result codes that mean something other than "ran and exited 0". */
+export const TASK_NEVER_RAN = 267011; // 0x00041303 SCHED_S_TASK_HAS_NOT_RUN
+export const TASK_RUNNING = 267009;   // 0x00041301 SCHED_S_TASK_RUNNING
+
+export interface TaskHealth {
+  /** Last exit code Task Scheduler recorded. */
+  lastResult: number;
+  /** True when the task has never executed once since it was registered. */
+  neverRan: boolean;
+  /** True when the task is executing right now. */
+  running: boolean;
+}
+
+/**
+ * Real liveness for every registered LifeOS task.
+ *
+ * `registeredLabels()` answers "does a task exist", which is NOT the same question
+ * as "is this service alive" — and conflating the two is how an install reports
+ * health it does not have. Observed 2026-08-16: seven tasks sat at `Ready` in Task
+ * Scheduler and `● running` in the registry while `LastTaskResult` was 267011,
+ * meaning they had never executed once since being registered six days earlier.
+ *
+ * Returns an empty map on any failure, so callers degrade to the registration-only
+ * view rather than reporting everything dead.
+ */
+export function taskHealth(): Map<string, TaskHealth> {
+  const out = new Map<string, TaskHealth>();
+  const ps =
+    "Get-ScheduledTask -TaskPath '\\" + TASK_FOLDER + "\\*' -ErrorAction SilentlyContinue | " +
+    "ForEach-Object { $i = $_ | Get-ScheduledTaskInfo; \"$($_.TaskName)`t$($i.LastTaskResult)\" }";
+  const p = Bun.spawnSync(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], { stdout: "pipe", stderr: "pipe" });
+  if ((p.exitCode ?? 1) !== 0) return out;
+  for (const line of p.stdout.toString().split(/\r?\n/)) {
+    const [name, res] = line.trim().split("\t");
+    if (!name || res === undefined) continue;
+    const lastResult = Number(res);
+    if (!Number.isFinite(lastResult)) continue;
+    out.set(name, {
+      lastResult,
+      neverRan: lastResult === TASK_NEVER_RAN,
+      running: lastResult === TASK_RUNNING,
+    });
+  }
+  return out;
+}
+
 export function installTask(spec: PlistSpec, bunDir: string): { code: number; out: string } {
   const wrapper = writeWrapper(spec, bunDir);
-  return schtasks([
+  const created = schtasks([
     "/Create", "/F",
     "/TN", taskName(spec.label),
     "/TR", `"${wrapper}"`,
     ...scheduleArgs(spec),
   ]);
+  if (created.code !== 0) return created;
+  // A task registered without these settings is exactly the defect being fixed,
+  // so a failed patch is an install failure. Reporting success here would leave
+  // a task that looks Ready and never runs, which is the silent failure the
+  // whole exercise exists to remove.
+  const hardened = hardenTaskSettings(spec.label);
+  if (hardened.code !== 0) {
+    return { code: hardened.code, out: `created, but settings patch FAILED (task will drop missed runs): ${hardened.out}` };
+  }
+  return created;
 }
 
 export function uninstallTask(label: string): { code: number; out: string } {
