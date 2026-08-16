@@ -29,7 +29,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  cadenceOfSpec, installTask, parsePlist, registeredLabels, uninstallTask, windowsBlocker, wrapperExists,
+  cadenceOfSpec, installTask, parsePlist, registeredLabels, taskHealth, uninstallTask, windowsBlocker, wrapperExists,
+  type TaskHealth,
 } from "./lib/win-scheduler";
 
 const IS_WIN = process.platform === "win32";
@@ -307,6 +308,10 @@ const REGISTRY = allServices();
 
 if (cmd === "status" || cmd === "list") {
   const loaded = loadedLabels();
+  // Windows only: real execution history, so `running` can mean ran rather than
+  // merely registered. Empty on non-Windows and on any probe failure, which
+  // degrades to the old registration-only view instead of reporting false deaths.
+  const health: Map<string, TaskHealth> = IS_WIN ? taskHealth() : new Map();
   console.log(`LifeOS background services (${REGISTRY.length})\n`);
   // 18, not 16: cadenceOfSpec() emits wider strings than the launchd/systemd
   // formatters, and a narrow column ran the cadence into the service name.
@@ -320,7 +325,18 @@ if (cmd === "status" || cmd === "list") {
       // On Windows "installed" means a generated wrapper exists; LaunchAgents,
       // which pl.installed tests, is never present there.
       const installed = IS_WIN ? wrapperExists(s.label) : !!pl?.installed;
-      const state = loaded.has(s.label) ? "● running" : installed ? "○ installed" : pl ? "· available" : "✗ missing";
+      // On Windows, being registered is not being alive. A task can sit at `Ready`
+      // for days with LastTaskResult 267011 (never executed once) while the old
+      // logic printed `● running` — the install reporting health it did not have.
+      // Distinguish the three real states rather than collapsing them into one.
+      const h = IS_WIN ? health.get(s.label) : undefined;
+      const state = loaded.has(s.label)
+        ? h?.neverRan
+          ? "◐ never ran"
+          : h && h.lastResult !== 0 && !h.running
+            ? "⚠ failing"
+            : "● running"
+        : installed ? "○ installed" : pl ? "· available" : "✗ missing";
       // On Windows report the schedule actually registered, which differs from
       // the plist wherever launchd has a trigger Task Scheduler lacks.
       const winSpec = IS_WIN && pl ? parsePlist(pl.path, bunPath()) : null;
@@ -328,7 +344,10 @@ if (cmd === "status" || cmd === "list") {
       console.log("  " + state.padEnd(13) + cad.padEnd(18) + `${s.title}  (${s.label})`);
     }
   }
-  const missingCore = REGISTRY.filter((s) => !s.optIn && !loaded.has(s.label));
+  // A core service that is registered but has never executed is not running, whatever
+  // Task Scheduler's `Ready` column says. Counting it as healthy is precisely how this
+  // install went four days without its learning loop and never mentioned it.
+  const missingCore = REGISTRY.filter((s) => !s.optIn && (!loaded.has(s.label) || health.get(s.label)?.neverRan));
   if (missingCore.length) console.log(`\n  ⚠️ core not running: ${missingCore.map((s) => s.label).join(", ")}`);
 } else if (cmd === "doc") {
   console.log("| Service | Category | Cadence | Opt-in | Purpose | Install |");
