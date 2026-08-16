@@ -250,9 +250,20 @@ async function inferenceAttempt(options: InferenceOptions, modelOverride?: strin
     // prompts through a 0600 temp file + --system-prompt-file (verified
     // supported by the installed claude CLI). Byte length, not char count —
     // the kernel limit is bytes.
+    //
+    // Windows adds a SECOND, far lower ceiling that the 100 KiB threshold sails
+    // straight past. npm installs `claude` as a shim, so spawn routes through
+    // cmd.exe, whose ENTIRE command line caps at 8191 characters — not the 32767
+    // of CreateProcess, and three orders of magnitude below Linux's per-arg cap.
+    // The memory reviewer's system prompt is a constant 8343 bytes, just over
+    // that line, so every reviewer run on a Windows install failed with "The
+    // command line is too long" and `priorSuccesses: 0`. Diagnosed 2026-08-16.
+    // The threshold is per-platform rather than globally lowered so the Linux and
+    // macOS paths keep passing small prompts on argv exactly as before.
+    const ARGV_MAX = process.platform === 'win32' ? 2_000 : 100_000;
     let systemPromptFile: string | null = null;
     let systemPromptArgs = ['--system-prompt', options.systemPrompt];
-    if (Buffer.byteLength(options.systemPrompt, 'utf8') > 100_000) {
+    if (Buffer.byteLength(options.systemPrompt, 'utf8') > ARGV_MAX) {
       systemPromptFile = join(tmpdir(), `lifeos-sysprompt-${randomUUID()}.md`);
       writeFileSync(systemPromptFile, options.systemPrompt, { mode: 0o600 });
       systemPromptArgs = ['--system-prompt-file', systemPromptFile];
