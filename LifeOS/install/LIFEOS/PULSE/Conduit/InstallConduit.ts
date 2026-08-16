@@ -15,6 +15,7 @@ import { join } from "node:path"
 import { loadConfig } from "./config.ts"
 import { DATA_ROOT } from "./paths.ts"
 import * as systemd from "../../TOOLS/lib/SystemdUser"
+import * as win from "../../TOOLS/lib/win-scheduler"
 
 const LABEL = "com.lifeos.conduit"
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`)
@@ -114,8 +115,65 @@ async function linuxMain(a: string | undefined): Promise<void> {
   if (!(await systemd.install(spec, log))) process.exit(1)
 }
 
+/* ── Windows Task Scheduler backend ─────────────────────────────────────────
+ * Strictly additive, same shape as the systemd backend above: launchd owns the
+ * job on darwin, systemd on linux, Task Scheduler on win32, and no install ever
+ * has two schedulers for one job.
+ *
+ * Without this, `bun InstallConduit.ts` on Windows wrote a plist into a
+ * ~/Library/LaunchAgents path that does not exist and then shelled out to a
+ * `launchctl` that is not installed. Conduit was consequently never registered
+ * here, while the Services.ts registry went on asserting it was a CORE service
+ * in the `running` state — the exact silent-failure class this repair exists to
+ * remove. Translation rules live in ../../TOOLS/lib/win-scheduler.ts.
+ * ------------------------------------------------------------------------- */
+
+const IS_WIN = process.platform === "win32"
+
+function winSpec(): win.PlistSpec {
+  return {
+    label: LABEL,
+    argv: [BUN, CONDUIT, "capture"],
+    startIntervalSec: loadConfig().pollIntervalSec,
+    runAtLoad: true,
+    // One-shot poll on a timer, not a daemon: keepAlive would make the wrapper
+    // guard suppress every tick after the first.
+    keepAlive: false,
+    watchPaths: false,
+    logPath: join(LOG_DIR, "conduit.out.log"),
+    env: {},
+  }
+}
+
+function winMain(a: string | undefined): void {
+  if (a === "--uninstall") {
+    const r = win.uninstallTask(LABEL)
+    console.log(r.code === 0 ? `Uninstalled ${LABEL}` : `Uninstall failed: ${r.out}`)
+    if (r.code !== 0) process.exit(1)
+    return
+  }
+  if (a === "--status") {
+    const registered = win.registeredLabels().has(LABEL)
+    console.log(registered ? `${LABEL} registered as a scheduled task` : `${LABEL} not registered`)
+    if (!registered) process.exit(1)
+    return
+  }
+  mkdirSync(LOG_DIR, { recursive: true })
+  const spec = winSpec()
+  const bunDir = BUN.replace(/[\\/][^\\/]+$/, "")
+  const r = win.installTask(spec, bunDir)
+  if (r.code !== 0) {
+    console.error(`Install FAILED for ${LABEL}: ${r.out}`)
+    process.exit(1)
+  }
+  console.log(`Installed ${LABEL} → polls every ${spec.startIntervalSec}s`)
+  console.log(`  task: \\LifeOS\\${LABEL}`)
+  console.log(`  logs: ${LOG_DIR}`)
+}
+
 const arg = process.argv[2]
-if (systemd.isLinux()) await linuxMain(arg)
+if (IS_WIN) winMain(arg)
+else if (systemd.isLinux()) await linuxMain(arg)
 else if (arg === "--uninstall") uninstall()
 else if (arg === "--status") status()
 else install()

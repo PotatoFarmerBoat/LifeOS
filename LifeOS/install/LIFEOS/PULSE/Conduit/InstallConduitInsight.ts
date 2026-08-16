@@ -16,6 +16,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { DATA_ROOT } from "./paths.ts"
 import * as systemd from "../../TOOLS/lib/SystemdUser"
+import * as win from "../../TOOLS/lib/win-scheduler"
 
 const LABEL = "com.lifeos.conduit.insight"
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`)
@@ -132,8 +133,52 @@ async function linuxMain(a: string | undefined): Promise<void> {
   if (!(await systemd.install(spec, log))) process.exit(1)
 }
 
+/* ── Windows Task Scheduler backend ─────────────────────────────────────────
+ * Strictly additive, mirroring the systemd backend above and the matching block
+ * in InstallConduit.ts. Before this, running the installer on Windows wrote a
+ * plist to a nonexistent ~/Library/LaunchAgents and shelled out to a missing
+ * `launchctl`, so the insight builder was never registered here.
+ * ------------------------------------------------------------------------- */
+
+const IS_WIN = process.platform === "win32"
+
+function winMain(a: string | undefined): void {
+  if (a === "--uninstall") {
+    const r = win.uninstallTask(LABEL)
+    console.log(r.code === 0 ? `Uninstalled ${LABEL}` : `Uninstall failed: ${r.out}`)
+    if (r.code !== 0) process.exit(1)
+    return
+  }
+  if (a === "--status") {
+    const registered = win.registeredLabels().has(LABEL)
+    console.log(registered ? `${LABEL} registered as a scheduled task` : `${LABEL} not registered`)
+    if (!registered) process.exit(1)
+    return
+  }
+  mkdirSync(LOG_DIR, { recursive: true })
+  const spec: win.PlistSpec = {
+    label: LABEL,
+    argv: [BUN, BUILD_INSIGHT],
+    startIntervalSec: INTERVAL_SEC,
+    runAtLoad: true,
+    keepAlive: false,
+    watchPaths: false,
+    logPath: join(LOG_DIR, "conduit-insight.out.log"),
+    env: {},
+  }
+  const r = win.installTask(spec, BUN.replace(/[\\/][^\\/]+$/, ""))
+  if (r.code !== 0) {
+    console.error(`Install FAILED for ${LABEL}: ${r.out}`)
+    process.exit(1)
+  }
+  console.log(`Installed ${LABEL} → runs hourly`)
+  console.log(`  task: \\LifeOS\\${LABEL}`)
+  console.log(`  logs: ${LOG_DIR}`)
+}
+
 const arg = process.argv[2]
-if (systemd.isLinux()) await linuxMain(arg)
+if (IS_WIN) winMain(arg)
+else if (systemd.isLinux()) await linuxMain(arg)
 else if (arg === "--uninstall") uninstall()
 else if (arg === "--status") status()
 else install()
