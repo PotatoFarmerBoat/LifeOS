@@ -139,7 +139,7 @@ interface ScoredNote {
 // ============================================================================
 
 function parseFrontmatter(content: string): { frontmatter: Frontmatter; body: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return { frontmatter: {}, body: content };
 
   const result: Frontmatter = {};

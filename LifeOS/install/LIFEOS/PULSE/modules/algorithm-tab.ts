@@ -448,7 +448,7 @@ async function commitFiles(absPaths: string[], message: string): Promise<{ commi
 /* ── Frontmatter freshness — bump what the file actually carries ── */
 
 function bumpFrontmatter(content: string): string {
-  const fm = content.match(/^---\n([\s\S]*?)\n---/);
+  const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fm) return content;
   let head = fm[1];
   const now = new Date().toISOString();

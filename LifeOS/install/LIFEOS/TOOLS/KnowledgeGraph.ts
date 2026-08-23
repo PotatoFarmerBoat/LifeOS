@@ -92,7 +92,7 @@ interface TraversalNode {
 // ============================================================================
 
 function parseFrontmatter(content: string): Record<string, any> {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
   const result: Record<string, any> = {};
   const lines = match[1].split("\n");
@@ -138,7 +138,7 @@ function parseFrontmatter(content: string): Record<string, any> {
 
 function extractWikilinks(content: string): string[] {
   // Strip frontmatter before scanning for wikilinks
-  const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "");
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/, "");
   const links: string[] = [];
   const regex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
   let match;
@@ -155,7 +155,7 @@ function extractWikilinks(content: string): string[] {
 
 function extractRelated(content: string): Array<{ slug: string; type: string }> {
   const related: Array<{ slug: string; type: string }> = [];
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fmMatch) return related;
 
   const lines = fmMatch[1].split("\n");

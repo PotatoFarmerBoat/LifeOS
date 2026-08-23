@@ -158,7 +158,7 @@ function getStats(): SystemStats {
     const daPath = join(CLAUDE_DIR, "LIFEOS", "USER", "DIGITAL_ASSISTANT", "DA_IDENTITY.md");
     if (existsSync(daPath)) {
       const content = readFileSync(daPath, "utf-8");
-      const m = content.match(/^---\n([\s\S]*?)\n---/);
+      const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (m) {
         const fm: any = parseYaml(m[1]) || {};
         const core = fm.core ?? {};

@@ -142,7 +142,7 @@ function readTelosFile(filename: string): string {
   // frontmatter block as a garbage first entry (e.g. "M0: --- provenance: ...").
   const path = join(TELOS_DIR, filename);
   if (existsSync(path)) {
-    return readFileSync(path, 'utf-8').replace(/^---\n[\s\S]*?\n---\n?/, '');
+    return readFileSync(path, 'utf-8').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
   }
   return unified;
 }
@@ -585,7 +585,7 @@ function principalDisplayName(): string {
   let coreName = '';
   if (existsSync(idPath)) {
     const content = readFileSync(idPath, 'utf-8');
-    const fm = content.match(/^---\n([\s\S]*?)\n---/);
+    const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (fm) {
       const fullName = fm[1].match(/^\s*full_name:\s*["']?(.+?)["']?\s*$/m);
       if (fullName && !looksLikeToken(fullName[1])) return fullName[1].trim();

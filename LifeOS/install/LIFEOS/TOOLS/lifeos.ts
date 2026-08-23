@@ -34,6 +34,25 @@ const CLAUDE_DIR = join(homedir(), ".claude");
 const MCP_DIR = join(CLAUDE_DIR, "MCPs");
 const ACTIVE_MCP = join(CLAUDE_DIR, ".mcp.json");
 const BANNER_SCRIPT = join(homedir(), ".claude", "LIFEOS", "TOOLS", "Banner.ts");
+
+/**
+ * True when CLAUDE.md already `@`-imports the constitutional layer.
+ *
+ * The launcher's --append-system-prompt-file only ever covered sessions started
+ * by this command. Desktop-app sessions accept no launch flag, so on 2026-08-23
+ * the file was reaching no session on this install. It is now imported from
+ * CLAUDE.md, which every session type reads. Passing the flag as well would load
+ * the same ~7.4k tokens twice, so the launcher stands down when the import is
+ * there and keeps its flag for installs that have not adopted it.
+ */
+export function claudeMdImportsSystemPrompt(): boolean {
+  try {
+    const claudeMd = readFileSync(join(CLAUDE_DIR, "CLAUDE.md"), "utf-8");
+    return /^@LIFEOS\/LIFEOS_SYSTEM_PROMPT\.md\s*$/m.test(claudeMd);
+  } catch {
+    return false;
+  }
+}
 const VOICE_SERVER = `${PULSE_BASE}/notify/personality`;
 const WALLPAPER_DIR = join(homedir(), "Projects", "Wallpaper");
 // Note: RAW archiving removed - Claude Code handles its own cleanup (30-day retention in projects/)
@@ -517,8 +536,11 @@ async function cmdLaunch(options: { mcp?: string; resume?: boolean; resumeId?: s
 
   // LifeOS System Prompt — constitutional rules appended to Claude Code's system prompt
   // These rules get highest instruction authority (system prompt layer > CLAUDE.md layer)
+  // An explicit -s/--system-prompt is the principal asking for a specific file,
+  // so it always wins. The default is skipped when CLAUDE.md already imports it.
   const systemPromptFile = options.systemPrompt ?? join(CLAUDE_DIR, "LIFEOS", "LIFEOS_SYSTEM_PROMPT.md");
-  if (existsSync(systemPromptFile)) {
+  const skipDefault = !options.systemPrompt && claudeMdImportsSystemPrompt();
+  if (existsSync(systemPromptFile) && !skipDefault) {
     args.push("--append-system-prompt-file", systemPromptFile);
   }
 
@@ -719,7 +741,7 @@ async function cmdPrompt(prompt: string) {
   // Same constitutional layer as interactive launches — without this, one-shots
   // ran bare Claude Code (CLAUDE.md only, no output format, no security protocol).
   const systemPromptFile = join(CLAUDE_DIR, "LIFEOS", "LIFEOS_SYSTEM_PROMPT.md");
-  if (existsSync(systemPromptFile)) {
+  if (existsSync(systemPromptFile) && !claudeMdImportsSystemPrompt()) {
     args.push("--append-system-prompt-file", systemPromptFile);
   }
 

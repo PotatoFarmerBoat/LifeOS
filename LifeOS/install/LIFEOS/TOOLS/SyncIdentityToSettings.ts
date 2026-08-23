@@ -30,7 +30,7 @@ function snakeToCamel(s: string): string {
 }
 
 function parseFrontmatter(text: string): Record<string, any> {
-  const m = text.match(/^---\n([\s\S]*?)\n---/);
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return {};
   // Minimal YAML — only what PRINCIPAL_IDENTITY uses (top-level keys + one
   // level of nesting via two-space indent). No arrays, no anchors.

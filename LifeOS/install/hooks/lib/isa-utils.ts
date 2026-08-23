@@ -31,7 +31,7 @@ const ISA_REWORK_JSONL = paiPath('MEMORY', 'OBSERVABILITY', 'isa-rework.jsonl');
 
 /** SHA-256 of the post-frontmatter body. Stable input for v6.9.0 B2 diff gate. */
 export function hashBody(content: string): string {
-  const fmMatch = content.match(/^---\n[\s\S]*?\n---\n?/);
+  const fmMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
   const body = fmMatch ? content.slice(fmMatch[0].length) : content;
   // Normalize line endings to immunize against CRLF/LF flips on save.
   const normalized = body.replace(/\r\n/g, '\n');
@@ -131,10 +131,20 @@ function stripTrailingYamlComment(raw: string): string {
 }
 
 export function parseFrontmatter(content: string): Record<string, string> | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  // CRLF tolerance (2026-08-23). Windows editors save ISAs with \r\n, and the
+  // old `^---\n` anchor never matched them, so parseFrontmatter returned null.
+  // Every caller treats null as "not an ISA" and returns early, so on this
+  // machine 4 of 7 ISAs never synced to work.json, never repainted a tab, and
+  // never emitted a climb strip. The run was invisible on every surface.
+  //
+  // A leading byte order mark defeats the same anchor for the same reason, and
+  // is likewise invisible in an editor. IntegrityCheck.ts already stripped it;
+  // this reader did not. Both invisible-character cases are covered by
+  // test/regression/crlf-blindspot.test.ts.
+  const match = content.replace(/^﻿/, '').match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
   const fm: Record<string, string> = {};
-  for (const line of match[1].split('\n')) {
+  for (const line of match[1].split(/\r?\n/)) {
     const idx = line.indexOf(':');
     if (idx > 0) fm[line.slice(0, idx).trim()] = stripTrailingYamlComment(line.slice(idx + 1).trim()).replace(/^["']|["']$/g, '');
   }
@@ -142,7 +152,7 @@ export function parseFrontmatter(content: string): Record<string, string> | null
 }
 
 export function writeFrontmatterField(content: string, field: string, value: string): string {
-  const fmMatch = content.match(/^(---\n)([\s\S]*?)(\n---)/);
+  const fmMatch = content.match(/^(---\r?\n)([\s\S]*?)(\r?\n---)/);
   if (!fmMatch) return content;
   const lines = fmMatch[2].split('\n');
   let found = false;
@@ -346,7 +356,7 @@ export function parseCriteriaList(content: string): CriterionEntry[] {
 //   3. H1 title line (after frontmatter)
 // Returns trimmed text capped at ~280 chars.
 export function extractIntentSnippet(content: string): string {
-  const after = content.replace(/^---[\s\S]*?\n---\n/, '');
+  const after = content.replace(/^---[\s\S]*?\r?\n---\r?\n/, '');
 
   // Try H2 sections in priority order.
   for (const heading of ['Intent', 'Context', 'Problem Space', 'Overview']) {
@@ -753,7 +763,15 @@ export function syncToWorkJson(fm: Record<string, string>, isaPath: string, cont
   let incomingBodyHash = content ? hashBody(content) : (existing.bodyHash || '');
   let persistedBodyLength = content ? content.length : 0;
   const isFrozen = fm.frozen === 'true' || fm.frozen === true as unknown as string;
-  const bodyChanged = !existing.bodyHash || existing.bodyHash !== incomingBodyHash;
+  // A MISSING stored hash is not evidence of a change (2026-08-23). It used to
+  // count as one, so any complete ISA whose registry row lacked a hash was
+  // auto-rewound to `learn` the next time it synced — phase flipped, iteration
+  // bumped, and a Decisions row appended, all on a body that never moved. The
+  // event log recorded `body_delta_bytes: 0` and `had_legacy_bodyhash: true`
+  // each time, so the code already knew the body was identical and rewound
+  // anyway. Hit for real during the CRLF registry backfill: two finished runs
+  // reopened themselves. Resume now needs a hash on both sides that differ.
+  const bodyChanged = !!existing.bodyHash && existing.bodyHash !== incomingBodyHash;
   const completeInRegistry = existing.phase === 'complete';
   const completeInFrontmatter = (fm.phase || '').toLowerCase() === 'complete';
   const shouldResume = completeInRegistry && completeInFrontmatter && bodyChanged && !isFrozen && !!content;

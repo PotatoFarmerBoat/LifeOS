@@ -85,7 +85,7 @@ type EdgeLayer = "declared" | "all"; // declared = related+wikilink+tag; all = +
 // ============================================================================
 
 function readFront(content: string): { fm: Record<string, any>; body: string } {
-  const m = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) return { fm: {}, body: content };
   const fm: Record<string, any> = {};
   for (const line of m[1].split("\n")) {
@@ -114,7 +114,7 @@ function parseTags(fm: Record<string, any>): string[] {
 // Extract typed related: entries from a knowledge note's frontmatter block.
 function extractRelated(content: string): Array<{ slug: string; type: string }> {
   const out: Array<{ slug: string; type: string }> = [];
-  const fm = content.match(/^---\n([\s\S]*?)\n---/);
+  const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fm) return out;
   const lines = fm[1].split("\n");
   let inRelated = false;

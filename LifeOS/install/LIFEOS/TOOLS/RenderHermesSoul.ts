@@ -71,7 +71,7 @@ const read = (p: string): string => {
  */
 function body(md: string): string {
   return md
-    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .split("\n")
     .filter((l) => !/^\s*---+\s*$/.test(l))

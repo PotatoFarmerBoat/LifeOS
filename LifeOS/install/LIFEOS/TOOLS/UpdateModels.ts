@@ -223,7 +223,7 @@ export function checkAgentFrontmatter(agentsDir: string = join(CLAUDE_DIR, "agen
   }
   for (const f of files) {
     const src = readFileSync(join(agentsDir, f), "utf8");
-    const fm = src.match(/^---\n([\s\S]*?)\n---/);
+    const fm = src.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!fm) continue;
     const modelLine = fm[1].match(/^model:\s*(\S+)/m);
     if (!modelLine) continue;

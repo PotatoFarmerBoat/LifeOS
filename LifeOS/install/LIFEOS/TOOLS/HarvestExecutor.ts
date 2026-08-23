@@ -339,7 +339,7 @@ function loadKnowledgeIndex(): KnowledgeNoteIndex[] {
 }
 
 function parseFrontmatter(raw: string): Record<string, string> {
-  const match = raw.match(/^---\n([\s\S]*?)\n---/);
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) {
     return {};
   }
@@ -463,7 +463,7 @@ function slugExists(slug: string, index: KnowledgeNoteIndex[]): boolean {
 
 function loadNoteRelated(notePath: string): string[] {
   const raw = fs.readFileSync(notePath, "utf8");
-  const match = raw.match(/^---\n([\s\S]*?)\n---/);
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) {
     return [];
   }

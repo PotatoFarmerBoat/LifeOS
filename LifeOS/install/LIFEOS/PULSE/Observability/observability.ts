@@ -1208,7 +1208,7 @@ function handleLadderApi(): Response {
 
         try {
           const content = readFileSync(join(dirPath, file), "utf-8")
-          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
+          const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
           if (!fmMatch) continue
 
           const fm: Record<string, string> = {}
@@ -1474,7 +1474,7 @@ const KNOWLEDGE_DIR = join(MEMORY_DIR, "KNOWLEDGE")
 const KNOWLEDGE_DOMAINS = ["People", "Companies", "Ideas", "Research"]
 
 function parseFrontmatter(content: string): Record<string, string | string[]> {
-  const match = content.match(/^---\n([\s\S]*?)\n---/)
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return {}
   const result: Record<string, string | string[]> = {}
   for (const line of match[1].split("\n")) {
@@ -1694,7 +1694,7 @@ async function handlePutKnowledgeNote(req: Request, domain: string, slug: string
     // Update the `updated` field in frontmatter to today
     const today = new Date().toISOString().split("T")[0]
     let content = body.content
-    if (content.match(/^---\n[\s\S]*?\nupdated:.*\n/)) {
+    if (content.match(/^---\r?\n[\s\S]*?\r?\nupdated:.*\r?\n/)) {
       content = content.replace(/(\nupdated:)\s*\S+/, `$1 ${today}`)
     }
 

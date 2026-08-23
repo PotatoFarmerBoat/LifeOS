@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * @version 1.5.0
+ * @version 1.8.0
  * ISASync.hook.ts — ISA → work.json sync via PostToolUse
  *
  * TRIGGER: PostToolUse (Write, Edit, MultiEdit, Read)
@@ -18,8 +18,8 @@
  * - Write/Edit/MultiEdit on ISA.md (or legacy PRD.md) → full sync; auto-rewind fires inside syncToWorkJson
  * - Read on ISA.md → bump lastToolActivity on the slug, rebind sessionUUID, debounced
  *
- * v1.5.0 (hook-fed phase strip): on any write whose DERIVED ascent state
- * changed for this session, emit a `<lifeos-ascent-delta>` block carrying the
+ * v1.6.0 (the strip carries the claim count): on any write whose DERIVED ascent
+ * state OR closed-claim count changed for this session, emit a `<lifeos-ascent-delta>` block carrying the
  * exact response-format phase strip, computed from the same deriveAscent()
  * every dashboard surface reads. The model echoes it verbatim and never
  * computes its own — same contract as the 🧠 MEMORY and ⚙️ SYSTEM lines
@@ -40,6 +40,7 @@ import {
   syncToWorkJson,
   readRegistry,
   bumpLastToolActivityBySlug,
+  parseCriteriaList,
   ARTIFACT_FILENAME,
   LEGACY_ARTIFACT_FILENAME,
 } from './lib/isa-utils';
@@ -127,12 +128,14 @@ async function main(): Promise<string | null> {
   // deriveAscent() the board reads — and reuse it for the tab and the strip,
   // so the two cannot disagree by construction.
   const [doneStr, totalStr] = String(fm.progress || '0/0').split('/');
+  const done = parseInt(doneStr, 10) || 0;
+  const total = parseInt(totalStr, 10) || 0;
   const state = deriveAscent({
     phase: newPhase,
     tracked: true,
     active: true,
-    done: parseInt(doneStr, 10) || 0,
-    total: parseInt(totalStr, 10) || 0,
+    done,
+    total,
   });
 
   // Repaint the tab when the run's declared phase changes.
@@ -150,28 +153,85 @@ async function main(): Promise<string | null> {
     }
   }
 
-  // v1.5.0: hook-fed phase strip (see header). Fires once per DERIVED-state
-  // transition — not per phase change, so progress reaching n/n emits 🪨 Cairn
-  // without a phase edit. Per-session dedupe file; subagents never emit (their
+  // v1.6.0: hook-fed phase strip (see header). Fires on every DERIVED-state
+  // OR claim-count change — not per phase change, so progress reaching n/n emits
+  // 🪨 Cairn without a phase edit, and each claim closed moves a visible bar. Per-session dedupe file; subagents never emit (their
   // ISA edits would strip-spam their own contexts, which helps nobody).
   let stripDelta: string | null = null;
   if (input.session_id && fm.slug && !isSubagentContext()) {
     try {
       const stripDir = join(homedir(), '.claude/LIFEOS/MEMORY/STATE/ascent-strip');
       const stripFile = join(stripDir, `${String(input.session_id).replace(/[^\w-]/g, '')}.json`);
-      let prev: { slug?: string; state?: string } = {};
+      let prev: { slug?: string; state?: string; done?: number; total?: number } = {};
       if (existsSync(stripFile)) {
         try { prev = JSON.parse(readFileSync(stripFile, 'utf-8')); } catch { /* corrupt = no prior */ }
       }
-      if (prev.slug !== fm.slug || prev.state !== state) {
+      // v1.6.0: fire on a CLAIM-COUNT change too, not only a state change.
+      // Most of a climb sits in one state (`ascending`), so the old gate emitted
+      // one strip at the top of the hill and then went silent for every claim
+      // closed after it. In that silence a per-claim "done" line is the only
+      // completion signal on screen, and it reads as the whole run finishing
+      // ({{PRINCIPAL_NAME}}, 2026-08-23: "claudes say x task is complete and i mistake it for
+      // saying the whole thing is complete... i can't visually see where the
+      // climbs are at"). The counts come from the same fm.progress deriveAscent
+      // already reads, so the strip and the board still cannot disagree.
+      if (prev.slug !== fm.slug || prev.state !== state || prev.done !== done || prev.total !== total) {
         const { mkdirSync, writeFileSync } = require('fs');
         mkdirSync(stripDir, { recursive: true });
-        writeFileSync(stripFile, JSON.stringify({ slug: fm.slug, state, at: new Date().toISOString() }));
+        writeFileSync(stripFile, JSON.stringify({ slug: fm.slug, state, done, total, at: new Date().toISOString() }));
         const tag = ascentTag(state);
+        // Plain English only. {{PRINCIPAL_NAME}}, 2026-08-23: "C9 or any other titles / nouns
+        // that aren't english words are meaningless to me... its not like i have
+        // the ISA open on a screen next to me". So the strip names the run by its
+        // human title (not the slug) and names the next open claim by its WORDS
+        // (not its id). The strip must be readable with nothing else on screen.
+        const words = (raw: string, cap: number): string => {
+          const t = String(raw)
+            .replace(/^Anti:\s*/i, 'guard: ')
+            .replace(/`[^`]*`/g, (m) => m.slice(1, -1))  // code spans read as noise
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (t.length <= cap) return t;
+          const cut = t.slice(0, cap);
+          const sp = cut.lastIndexOf(' ');
+          return (sp > cap * 0.5 ? cut.slice(0, sp) : cut).replace(/[,;:.\-—]$/, '') + '…';
+        };
+        // One line, always. A strip that wraps is worse than no strip: the wrap
+        // lands it back in the wall of text it exists to escape. So the fields
+        // are fitted to a fixed width instead of each being capped in isolation,
+        // which is how the first version reached 190 columns.
+        // 120 columns is the Windows Terminal default and the narrowest width
+        // the strip is allowed to assume. Everything is fitted to that budget
+        // together rather than each field being capped on its own, which is how
+        // the first version reached 190 columns and wrapped.
+        const WIDTH = 120;
+        const head = `════ LifeOS | Algorithm | ${tag.icon} ${tag.label}`;
+        // The state icon is emoji and occupies two terminal columns, not one.
+        let budget = WIDTH - (head.length + 1) - ' ════'.length;
+
+        // Priority when space is short: the count never goes, because it is the
+        // field that separates one claim closing from the whole run closing.
+        // The run name yields next. The claim text absorbs whatever is left.
+        const count = total > 0 ? ` | ${done} of ${total} done` : '';
+        budget -= count.length;
+
+        const name = words(fm.title || fm.task || String(fm.slug).replace(/-/g, ' '), 30);
+        budget -= name.length + 3;
+
+        let claim = '';
+        const nextOpen = total > 0 && done < total
+          ? parseCriteriaList(content).find((c) => c.status !== 'completed')
+          : undefined;
+        // Below about 16 columns a claim is unreadable, so drop it rather than
+        // print two words and an ellipsis.
+        if (nextOpen && budget >= 16 + ' | now: '.length) {
+          claim = ` | now: ${words(nextOpen.description, budget - ' | now: '.length)}`;
+        }
+        const climb = ` | ${name}${count}${claim}`;
         stripDelta = [
           '<lifeos-ascent-delta>',
-          "The run's derived ascent state changed (computed by ISASync through the same deriveAscent() every dashboard surface reads). Lead the next visible status note with this phase strip VERBATIM, exactly once. Never compute a strip yourself:",
-          `════ LifeOS | Algorithm | ${tag.icon} ${tag.label} ════`,
+          "The run's position on the hill changed, computed by ISASync through the same deriveAscent() every dashboard surface reads. Render this strip VERBATIM, exactly once, on its own line DIRECTLY ABOVE the closer at the very BOTTOM of the response. Never at the top. Never compute a strip yourself. The count is the WHOLE run: never call the run done while it reads below n of n. When a claim closes, say what it was in plain words (\"the charts have labelled axes now\") and never by its id alone (\"C7 closed\"), because the principal does not have the ISA open.",
+          `════ LifeOS | Algorithm | ${tag.icon} ${tag.label}${climb} ════`,
           '</lifeos-ascent-delta>',
         ].join('\n');
       }

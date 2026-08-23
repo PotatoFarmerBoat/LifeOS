@@ -325,7 +325,7 @@ async function readToolActivityTail(slug: string): Promise<string> {
 // in every bundle path, so Cato reads the literal anchor before the ISA, artifacts,
 // or tool tail. Returns formatted section or empty string when absent.
 function extractGoalSection(isa: string): string {
-  const frontmatterMatch = isa.match(/^---\n([\s\S]*?)\n---/);
+  const frontmatterMatch = isa.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!frontmatterMatch) return "";
   const goalLine = frontmatterMatch[1].match(/^principal_stated_goal:\s*"((?:[^"\\]|\\.)*)"/m);
   if (!goalLine || !goalLine[1]) return "";

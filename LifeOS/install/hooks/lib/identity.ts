@@ -112,7 +112,7 @@ function loadFrontmatter(path: string): Record<string, any> | null {
   try {
     if (!existsSync(path)) return null;
     const content = readFileSync(path, 'utf-8');
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!match) return null;
     return parseYaml(match[1]) || null;
   } catch {

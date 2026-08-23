@@ -89,7 +89,7 @@ interface SweepStats {
 }
 
 function parseFrontmatter(content: string): ISAFm | null {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const fm: Record<string, string | number> = {};
   for (const line of m[1].split("\n")) {

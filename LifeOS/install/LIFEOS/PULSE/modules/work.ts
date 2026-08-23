@@ -165,7 +165,7 @@ function extractPrincipalGoal(slug: string | undefined): string | undefined {
   if (!existsSync(isaPath)) return undefined;
   try {
     const content = readFileSync(isaPath, "utf-8");
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!fmMatch) return undefined;
     const goalLine = fmMatch[1].match(/^principal_stated_goal:\s*"((?:[^"\\]|\\.)*)"/m);
     return goalLine && goalLine[1] ? goalLine[1] : undefined;

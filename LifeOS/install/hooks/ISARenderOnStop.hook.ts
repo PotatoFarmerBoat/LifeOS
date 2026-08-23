@@ -38,7 +38,7 @@ const ISA_RENDER = join(homedir(), '.claude/LIFEOS/TOOLS/ISARender.ts');
  */
 function hasReachedCompletion(isaPath: string): boolean {
   try {
-    const fm = (readFileSync(isaPath, 'utf-8').match(/^---\n([\s\S]*?)\n---/) || [, ''])[1];
+    const fm = (readFileSync(isaPath, 'utf-8').match(/^---\r?\n([\s\S]*?)\r?\n---/) || [, ''])[1];
     if (/^phase:\s*complete\b/mi.test(fm)) return true;
     const iter = fm.match(/^iteration:\s*(\d+)/mi);
     if (iter && parseInt(iter[1], 10) > 1) return true;

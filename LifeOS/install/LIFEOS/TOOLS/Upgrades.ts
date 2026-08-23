@@ -134,7 +134,7 @@ function parseRecord(filename: string): UpgradeRecord | null {
   const fp = join(RECORDS_DIR, filename);
   if (!existsSync(fp)) return null;
   const content = readFileSync(fp, "utf-8");
-  const m = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!m) return null;
   const fm: Record<string, any> = {};
   let arrKey: string | null = null;

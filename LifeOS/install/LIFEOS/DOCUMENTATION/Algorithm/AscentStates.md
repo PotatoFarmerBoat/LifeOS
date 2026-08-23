@@ -105,7 +105,7 @@ Four writers touch rows. `syncToWorkJson`, `WorkReconcile` and `SessionCleanup` 
 |---|---|
 | `hooks/lib/tab-constants.ts` | re-exports the table; owns only the non-run tab colours |
 | `hooks/lib/tab-setter.ts` | `setAscentTab()`, cmux pill + progress, prefix stripping |
-| `hooks/ISASync.hook.ts` | derives on every ISA write, stamps the tab; injects the response-format phase strip as a `<lifeos-ascent-delta>` block on derived-state change (model echoes verbatim, never self-computes — 2026-08-11, after a self-computed strip said 🧗 while the board derived 🥾) |
+| `hooks/ISASync.hook.ts` | derives on every ISA write, stamps the tab; injects the response-format phase strip as a `<lifeos-ascent-delta>` block on derived-state OR claim-count change, carrying `<plain-English run name> | <done> of <total> done | now: <plain-English next claim>`, rendered above the closer at the bottom (v1.8.0 — names and claims in plain English, never ids or slugs) (model echoes verbatim, never self-computes — 2026-08-11, after a self-computed strip said 🧗 while the board derived 🥾) |
 | `hooks/lib/isa-utils.ts` | writes the `ascent` blob onto the `work.json` row |
 | `hooks/PromptProcessing.hook.ts` | re-stamps the run's state across iterations; stamps `traverse` for un-ISA'd work and skill runs (the pre-Algorithm ⚙️ working gear is retired, 2026-07-28 — 🧠 thinking remains as the transient prompt-processing flash) |
 | `hooks/TabState.hook.ts` | question flow — carries the run's ascent through the teal question stamp via `previousAscent`, restores it after (fallback `traverse`) |

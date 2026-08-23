@@ -3,6 +3,13 @@
 > **LifeOS is the AI harness that moves you from current state to ideal state — an intent engineering platform. The DA is the principal's AI assistant. Pulse is the Life Dashboard.**
 > Canonical thesis: `LIFEOS/DOCUMENTATION/LifeOs/LifeOsThesis.md`. Everyone running LifeOS names their own DA. LifeOS targets AS3 on the LifeOS Maturity Model, with lineage from "The Real Internet of Things" (2016).
 
+# The constitutional layer. Imported here, not left to the launcher (2026-08-23).
+# `LIFEOS/TOOLS/lifeos.ts` also passes it with --append-system-prompt-file, but that
+# only covers sessions started by the `lifeos` command. Where `lifeos` is not on PATH,
+# and in any client that cannot take a launch flag, the file reached no session at all
+# and every edit to it was inert. CLAUDE.md is read by every session, so it loads here.
+# The launcher stands down when this import is present, so it loads once, not twice.
+@LIFEOS/LIFEOS_SYSTEM_PROMPT.md
 @LIFEOS/DOCUMENTATION/ARCHITECTURE_SUMMARY.md
 # Identity @-imports below are activated by the agentic `/LifeOS setup` (via `skills/LifeOS/Tools/ActivateImports.ts`) once the principal scaffolds USER files.
 # Claude Code does not follow transitive @-imports, so each must be listed here directly.
@@ -15,6 +22,8 @@
 ## Constitutional layer
 
 Constitutional rules, the unified response format, verification doctrine, hard prohibitions, security protocol, and operational rules all live in the system prompt: `LIFEOS/LIFEOS_SYSTEM_PROMPT.md`. When this file and the system prompt disagree, the system prompt wins.
+
+**It is `@`-imported at the top of this file, and that is the only loading path that works everywhere.** The `lifeos` launcher also passes it with `--append-system-prompt-file`, but that covers terminal sessions started by that one command. Clients that accept no launch flag never received it, so the constitutional layer could be absent with nothing reporting it. Check the import first if a rule in that file is not being followed. The launcher skips its flag when this import is present, so the file loads once, not twice.
 
 This file is the **routing table** — it tells you where everything lives. The only mandatory startup `@`-import shipped with public LifeOS is `ARCHITECTURE_SUMMARY`. The five identity files (`PRINCIPAL_TELOS`, `PRINCIPAL_IDENTITY`, `DA_IDENTITY`, `PROJECTS`, `OPERATIONAL_RULES`) are commented out above — the agentic `/LifeOS setup` (via `skills/LifeOS/Tools/ActivateImports.ts`) uncomments them once the principal's USER scaffold is populated. Claude Code does not follow transitive `@`-imports from inside imported files, so each identity file must be listed here at top level. Everything below is **on-demand** lookup. Paths are relative to `~/.claude/` unless noted.
 

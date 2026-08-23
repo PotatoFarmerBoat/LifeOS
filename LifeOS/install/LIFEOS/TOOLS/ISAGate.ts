@@ -54,7 +54,7 @@ export interface GateReport {
 }
 
 function frontmatter(text: string): Record<string, string> {
-  const m = text.match(/^---\n([\s\S]*?)\n---/);
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const fm: Record<string, string> = {};
   if (!m) return fm;
   for (const line of m[1]!.split("\n")) {

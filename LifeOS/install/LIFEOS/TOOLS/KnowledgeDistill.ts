@@ -127,7 +127,7 @@ function itemHash(title: string): string {
 function parseNote(absPath: string, domain: string): NoteCandidate | null {
   let raw: string;
   try { raw = readFileSync(absPath, "utf-8"); } catch { return null; }
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) return null;
   const fm = m[1];
   const body = m[2] ?? "";

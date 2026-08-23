@@ -286,7 +286,7 @@ async function main() {
     if (isaPath) {
       // v4.0+: Read from ISA.md / PRD.md frontmatter
       const isaContent = readFileSync(isaPath, 'utf-8');
-      const fmMatch = isaContent.match(/^---\n([\s\S]*?)\n---/);
+      const fmMatch = isaContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (fmMatch) {
         workMeta = parseYaml(fmMatch[1]);
       }

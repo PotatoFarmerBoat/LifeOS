@@ -87,7 +87,7 @@ const moduleState: ModuleState = {
 // ── Parsing ────────────────────────────────────────────────────────────────
 
 function parseFrontmatter(content: string): { fm: Record<string, any>; body: string } {
-  const m = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!m) return { fm: {}, body: content };
   const fmRaw = m[1];
   const body = m[2];

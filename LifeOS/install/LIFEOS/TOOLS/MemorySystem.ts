@@ -562,7 +562,7 @@ function renderAppendedSection(item: TypedItem & { type: "idea" | "knowledge" })
  * what it can recognize; ignores malformed entries silently.
  */
 function parseRelatedFromFrontmatter(content: string): RelatedLink[] {
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (!fmMatch) return [];
   const fm = fmMatch[1];
   // Match the block form: `related:\n  - slug: X\n    type: Y\n  - slug: A\n    type: B`
@@ -607,7 +607,7 @@ function mergeRelatedIntoExisting(content: string, incoming: RelatedLink[]): str
 
   const mergedBlock = renderRelatedBlock([...bySlug.values()]);
   // Replace existing related: block or insert one before the closing ---
-  const fmMatch = content.match(/^(---\n)([\s\S]*?)(\n---\n)/);
+  const fmMatch = content.match(/^(---\r?\n)([\s\S]*?)(\r?\n---\r?\n)/);
   if (!fmMatch) return content;
   let fm = fmMatch[2];
   if (/^related:/m.test(fm)) {

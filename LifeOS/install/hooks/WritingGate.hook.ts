@@ -62,7 +62,7 @@ const DELIVER_LABEL = /\brewritten version\s*:|\bhere'?s the (post|draft|copy|th
 // it carries a publish marker — so pasted YAML examples and internal ISA/skill
 // frontmatter (task:/slug:/name:) never trip the teeth.
 const BLOG_FRONTMATTER =
-  /^---\s*\n(?=[\s\S]{0,500}?\btitle\s*:)(?=[\s\S]{0,500}?\b(?:date|tags|published|category)\s*:)/i;
+  /^---\s*\r?\n(?=[\s\S]{0,500}?\btitle\s*:)(?=[\s\S]{0,500}?\b(?:date|tags|published|category)\s*:)/i;
 
 // WEAK (telemetry only): ambiguous authoring nouns.
 const WEAK_SIGNALS: RegExp[] = [

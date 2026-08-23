@@ -237,7 +237,7 @@ function scanAutoMemory(state: HarvestState): HarvestCandidate[] {
       candidates.push({
         sourcePath: filePath,
         title: frontmatter.name || frontmatter.title || file.replace(/\.md$/, ""),
-        content: content.replace(/^---[\s\S]*?---\n*/, ""), // Strip frontmatter
+        content: content.replace(/^---[\s\S]*?---\r?\n*/, ""), // Strip frontmatter
         domain,
         type,
         tags: extractTags(content),
@@ -409,7 +409,7 @@ function scanHarvestQueue(_state: HarvestState): HarvestCandidate[] {
 // ============================================================================
 
 function parseFrontmatter(content: string): Record<string, any> {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
   const result: Record<string, any> = {};
   for (const line of match[1].split("\n")) {

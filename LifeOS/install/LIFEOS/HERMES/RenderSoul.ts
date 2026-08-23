@@ -51,7 +51,7 @@ const read = (p: string): string => {
 
 function body(md: string): string {
   return md
-    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .split("\n")
     .filter((l) => !/^\s*---+\s*$/.test(l))
@@ -244,7 +244,7 @@ export function skillIndex(): Array<{ name: string; summary: string }> {
   for (const dir of readdirSync(SKILLS_DIR).sort()) {
     const path = join(SKILLS_DIR, dir, "SKILL.md");
     if (!existsSync(path)) continue;
-    const fm = readFileSync(path, "utf8").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+    const fm = readFileSync(path, "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? "";
     const name = fm.match(/^name:\s*"?([^"\n]+)"?\s*$/m)?.[1]?.trim() || dir;
     const desc = fm.match(/^description:\s*"([^\n]*)"\s*$/m)?.[1] ?? fm.match(/^description:\s*(.+)$/m)?.[1] ?? "";
     let summary = desc.split(/\s*USE WHEN/i)[0].trim().replace(/[.\s]+$/, "");

@@ -390,7 +390,7 @@ export function buildIndex(): SkillIndex {
     try {
       if (!existsSync(skillMd)) continue;
       const head = readFileSync(skillMd, 'utf-8').slice(0, 4096);
-      const fm = head.match(/^---\n([\s\S]*?)\n---/);
+      const fm = head.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (!fm) continue;
       const desc = fm[1].match(/description:\s*([\s\S]*?)(?:\n[a-zA-Z_-]+:|$)/);
       if (!desc) continue;
