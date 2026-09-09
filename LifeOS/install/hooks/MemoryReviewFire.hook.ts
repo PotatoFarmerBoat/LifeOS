@@ -228,6 +228,7 @@ function spawnReviewer(turnsReviewed: number, transcriptPath: string | null): { 
     if (transcriptPath && existsSync(transcriptPath)) args.push("--input", transcriptPath);
     const proc = spawn("bun", args, {
       env,
+      cwd: CLAUDE_ROOT, // bun auto-loads ~/.claude/.env (CLAUDE_CODE_OAUTH_TOKEN) only from this cwd; without it the reviewer falls back to the expired .credentials.json and every run fails "OAuth session expired"
       stdio: "ignore",
       detached: true, windowsHide: true,
     });
