@@ -13,7 +13,7 @@
  * Interceptor tabs without opening new ones; refresh failure is non-fatal.
  */
 
-import { readFileSync, writeFileSync, existsSync, statSync, renameSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, renameSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve, dirname, basename, join } from "node:path";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
@@ -567,11 +567,45 @@ function renderWarnings(warnings: string[]): string {
 
 // ─────────── INTERCEPTOR REFRESH ───────────
 
+// Interceptor is optional. On a machine where it cannot work (extension blocked,
+// daemon unreachable) every render paid a process spawn to rediscover that, and on
+// Windows that spawn allocates a console — with Windows Terminal as the default
+// terminal app it opens a real tab, not a flash. So remember the failure across
+// invocations and skip the probe until the marker ages out.
+const INTERCEPTOR_DOWN_MARKER = join(HOME, ".claude/LIFEOS/MEMORY/STATE/interceptor-unavailable.json");
+const INTERCEPTOR_DOWN_TTL_MS = 6 * 60 * 60 * 1000;
+
+function interceptorRecentlyFailed(): boolean {
+  try {
+    const raw = JSON.parse(readFileSync(INTERCEPTOR_DOWN_MARKER, "utf-8"));
+    return typeof raw.at === "number" && Date.now() - raw.at < INTERCEPTOR_DOWN_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markInterceptorDown(reason: string): void {
+  try {
+    writeFileSync(INTERCEPTOR_DOWN_MARKER, JSON.stringify({ at: Date.now(), reason }, null, 2), "utf-8");
+  } catch { /* best effort — never fail a render over the marker */ }
+}
+
+function clearInterceptorDown(): void {
+  try { if (existsSync(INTERCEPTOR_DOWN_MARKER)) unlinkSync(INTERCEPTOR_DOWN_MARKER); } catch { /* best effort */ }
+}
+
 async function refreshInterceptorTabs(htmlPath: string): Promise<{ refreshed: number; warning?: string }> {
   const fileUrl = `file://${htmlPath}`;
+  if (interceptorRecentlyFailed()) {
+    return { refreshed: 0, warning: "interceptor skipped (recent failure cached; delete MEMORY/STATE/interceptor-unavailable.json to retry)" };
+  }
   try {
     const tabsOut = await runCmd("interceptor", ["tabs", "--json"], 5000);
-    if (!tabsOut.ok) return { refreshed: 0, warning: `interceptor tabs failed: ${tabsOut.stderr.slice(0, 100)}` };
+    if (!tabsOut.ok) {
+      markInterceptorDown(`interceptor tabs failed: ${tabsOut.stderr.slice(0, 200)}`);
+      return { refreshed: 0, warning: `interceptor tabs failed: ${tabsOut.stderr.slice(0, 100)}` };
+    }
+    clearInterceptorDown();
     let tabs: any[] = [];
     try {
       const parsed = JSON.parse(tabsOut.stdout);
@@ -605,13 +639,15 @@ async function refreshInterceptorTabs(htmlPath: string): Promise<{ refreshed: nu
     }
     return { refreshed };
   } catch (e: any) {
+    markInterceptorDown(`interceptor unavailable: ${e?.message ?? "unknown"}`);
     return { refreshed: 0, warning: `interceptor unavailable: ${e?.message ?? "unknown"}` };
   }
 }
 
 function runCmd(cmd: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const proc = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    // windowsHide keeps the child from allocating a console on Windows.
+    const proc = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = ""; let stderr = ""; let done = false;
     const timer = setTimeout(() => { if (!done) { done = true; proc.kill(); resolve({ ok: false, stdout, stderr: stderr + " [timeout]" }); } }, timeoutMs);
     proc.stdout.on("data", (d) => stdout += d.toString());
