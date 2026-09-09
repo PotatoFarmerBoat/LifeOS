@@ -67,6 +67,37 @@ export function resolveClaudeBin(): string {  // exported for algorithm.ts (PR #
   return "claude";
 }
 
+/**
+ * Ensure CLAUDE_CODE_OAUTH_TOKEN is present, independent of cwd. Bun only
+ * auto-loads ~/.claude/.env when a bun process STARTS in ~/.claude; any hook or
+ * service that spawns an inference caller from another cwd (e.g. the session's
+ * working folder) never gets the token, so the headless CLI falls back to the
+ * expired ~/.claude/.credentials.json and every call fails "OAuth session
+ * expired" (api_error_status=null) — surfaced as memory health CRITICAL. This
+ * bit MemoryReviewFire specifically (fixed with cwd there), but the fragility
+ * lived in every consumer; loading the .env by absolute path here fixes the
+ * class. Guarded: only fills the token when absent, so the working case, the
+ * billing scrub below, and any deliberately-set token are all untouched.
+ * Diagnosed 2026-09-09.
+ */
+export function ensureOAuthTokenLoaded(): void {
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) return;
+  try {
+    const envPath = join(homedir(), ".claude", ".env");
+    if (!existsSync(envPath)) return;
+    for (const raw of require("fs").readFileSync(envPath, "utf8").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      if (line.slice(0, eq).trim() !== "CLAUDE_CODE_OAUTH_TOKEN") continue;
+      const val = line.slice(eq + 1).trim().replace(/^["']|["']$/g, "").replace(/\s+/g, "");
+      if (val) process.env.CLAUDE_CODE_OAUTH_TOKEN = val;
+      return;
+    }
+  } catch { /* never let token bootstrap throw — inference will surface the auth error itself */ }
+}
+
 /** Per-platform names for the CLI under ~/.local/bin, most specific first. */
 function claudeBinCandidates(): string[] {
   const dir = join(homedir(), ".local", "bin");
@@ -220,6 +251,9 @@ async function inferenceAttempt(options: InferenceOptions, modelOverride?: strin
   const model = modelOverride ?? config.model;
 
   return new Promise((resolve) => {
+    // Load the OAuth token by absolute path first, so a caller spawned from any
+    // cwd still authenticates (see ensureOAuthTokenLoaded above).
+    ensureOAuthTokenLoaded();
     // Unset CLAUDECODE so nested `claude` invocations don't trigger the
     // nested-session guard (hooks run inside Claude Code's environment).
     const env = { ...process.env };
